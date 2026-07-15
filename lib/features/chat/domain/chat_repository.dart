@@ -1,0 +1,35 @@
+import 'chat_message.dart';
+
+typedef MessageListener = void Function(ChatMessage message);
+typedef ConnectionListener = void Function();
+
+abstract interface class ChatSubscription {
+  Future<void> cancel();
+}
+
+abstract interface class ChatRepository {
+  Future<String> joinPublicRoom();
+
+  Future<List<ChatMessage>> fetchMessages({
+    required String roomId,
+    MessageCursor? before,
+    int limit = 50,
+  });
+
+  Future<List<ChatMessage>> fetchMessagesAfter({
+    required String roomId,
+    required MessageCursor after,
+  });
+
+  Future<ChatMessage> sendMessage({
+    required String roomId,
+    required String clientMessageId,
+    required String body,
+  });
+
+  Future<ChatSubscription> subscribe({
+    required String roomId,
+    required MessageListener onMessage,
+    required ConnectionListener onConnected,
+  });
+}
