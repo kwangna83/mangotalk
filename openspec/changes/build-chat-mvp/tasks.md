@@ -59,7 +59,7 @@
 
 - [x] 7.1 Git 상태와 추적 파일을 검토하고 환경 비밀값·인증서·private key가 커밋 대상에 없는지 검사한다
 - [x] 7.2 OpenSpec 산출물, Flutter 코드, Supabase migration 및 README를 의미 있는 단위로 커밋한다
-- [ ] 7.3 origin이 https://github.com/kwangna83/mangotalk.git인지 확인하고 main 브랜치를 push한다
+- [x] 7.3 origin이 https://github.com/kwangna83/mangotalk.git인지 확인하고 main 브랜치를 push한다
 - [ ] 7.4 Apple Developer Program과 App Store Connect에 앱 ID, 앱 레코드 및 iOS 서명 설정을 준비한다
 - [ ] 7.5 macOS와 Xcode에서 버전·빌드 번호를 설정하고 배포용 iOS archive를 App Store Connect에 업로드한다
 - [ ] 7.6 TestFlight 베타 설명, 피드백 이메일, 테스트 항목 및 심사 정보를 작성한다
