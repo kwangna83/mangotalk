@@ -13,10 +13,13 @@ class SupabaseChatRepository implements ChatRepository {
   Future<String> joinPublicRoom() async {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('로그인이 필요합니다.');
-    await _client.from('room_members').upsert({
-      'room_id': ChatConstants.publicRoomId,
-      'user_id': user.id,
-    });
+    await _client
+        .from('room_members')
+        .upsert(
+          {'room_id': ChatConstants.publicRoomId, 'user_id': user.id},
+          onConflict: 'room_id,user_id',
+          ignoreDuplicates: true,
+        );
     return ChatConstants.publicRoomId;
   }
 
