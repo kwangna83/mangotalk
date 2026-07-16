@@ -45,6 +45,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           _Header(
+            onRefresh: () => ref.invalidate(chatControllerProvider),
             onSignOut:
                 () => ref.read(authControllerProvider.notifier).signOut(),
           ),
@@ -144,7 +145,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onSignOut});
+  const _Header({required this.onRefresh, required this.onSignOut});
+  final VoidCallback onRefresh;
   final VoidCallback onSignOut;
 
   @override
@@ -175,6 +177,11 @@ class _Header extends StatelessWidget {
               const Text('함께 이야기하는 중', style: TextStyle(fontSize: 12)),
             ],
           ),
+        ),
+        IconButton(
+          tooltip: '채팅 새로고침',
+          onPressed: onRefresh,
+          icon: const Icon(Icons.refresh_rounded),
         ),
         IconButton(
           tooltip: '로그아웃',
