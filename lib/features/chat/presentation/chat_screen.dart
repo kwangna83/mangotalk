@@ -292,30 +292,87 @@ class _MessageImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Tooltip(
+      message: '크게 보기',
+      child: Semantics(
+        button: true,
+        label: '이미지 크게 보기',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap:
+              message.localImageBytes != null || message.imageUrl != null
+                  ? () => _showImageViewer(context)
+                  : null,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minWidth: 120,
+                maxWidth: 260,
+                minHeight: 80,
+                maxHeight: 320,
+              ),
+              child: _image(fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _image({required BoxFit fit}) {
     final bytes = message.localImageBytes;
     final imageUrl = message.imageUrl;
-    Widget image;
-    if (bytes != null) {
-      image = Image.memory(bytes, fit: BoxFit.cover);
-    } else if (imageUrl != null) {
-      image = Image.network(
+    if (bytes != null) return Image.memory(bytes, fit: fit);
+    if (imageUrl != null) {
+      return Image.network(
         imageUrl,
-        fit: BoxFit.cover,
+        fit: fit,
         loadingBuilder:
             (context, child, progress) =>
                 progress == null
                     ? child
-                    : const Center(child: CircularProgressIndicator()),
-        errorBuilder: (_, _, _) => const _ImageError(),
+                    : const SizedBox(
+                      width: 120,
+                      height: 120,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+        errorBuilder:
+            (_, _, _) =>
+                const SizedBox(width: 240, height: 160, child: _ImageError()),
       );
-    } else {
-      image = const _ImageError();
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(width: 240, height: 200, child: image),
-    );
+    return const SizedBox(width: 240, height: 160, child: _ImageError());
   }
+
+  Future<void> _showImageViewer(BuildContext context) => showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: .92),
+    builder:
+        (context) => Dialog.fullscreen(
+          backgroundColor: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: .5,
+                  maxScale: 5,
+                  child: Center(child: _image(fit: BoxFit.contain)),
+                ),
+              ),
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + 8,
+                right: 12,
+                child: IconButton.filledTonal(
+                  tooltip: '닫기',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ),
+            ],
+          ),
+        ),
+  );
 }
 
 class _ImageError extends StatelessWidget {
