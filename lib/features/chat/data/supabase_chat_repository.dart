@@ -202,10 +202,14 @@ class SupabaseChatRepository implements ChatRepository {
 
   Future<ChatMessage> _messageWithUrl(Map<String, dynamic> row) async {
     final attachments = row['message_attachments'];
-    final attachment =
-        attachments is List && attachments.isNotEmpty
-            ? Map<String, dynamic>.from(attachments.first as Map)
-            : null;
+    final Map<String, dynamic>? attachment;
+    if (attachments is Map) {
+      attachment = Map<String, dynamic>.from(attachments);
+    } else if (attachments is List && attachments.isNotEmpty) {
+      attachment = Map<String, dynamic>.from(attachments.first as Map);
+    } else {
+      attachment = null;
+    }
     final path =
         (row['attachment_path'] ?? attachment?['storage_path']) as String?;
     String? imageUrl;
