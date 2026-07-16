@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
 enum MessageSendStatus { sending, sent, failed }
+
+enum ChatMessageType { text, image }
 
 class ChatMessage {
   const ChatMessage({
@@ -9,6 +13,10 @@ class ChatMessage {
     required this.clientMessageId,
     required this.body,
     required this.createdAt,
+    this.type = ChatMessageType.text,
+    this.imageUrl,
+    this.localImageBytes,
+    this.imageMimeType,
     this.status = MessageSendStatus.sent,
   });
 
@@ -19,11 +27,16 @@ class ChatMessage {
   final String clientMessageId;
   final String body;
   final DateTime createdAt;
+  final ChatMessageType type;
+  final String? imageUrl;
+  final Uint8List? localImageBytes;
+  final String? imageMimeType;
   final MessageSendStatus status;
 
   ChatMessage copyWith({
     String? id,
     DateTime? createdAt,
+    String? imageUrl,
     MessageSendStatus? status,
   }) {
     return ChatMessage(
@@ -34,6 +47,10 @@ class ChatMessage {
       clientMessageId: clientMessageId,
       body: body,
       createdAt: createdAt ?? this.createdAt,
+      type: type,
+      imageUrl: imageUrl ?? this.imageUrl,
+      localImageBytes: localImageBytes,
+      imageMimeType: imageMimeType,
       status: status ?? this.status,
     );
   }
@@ -49,9 +66,16 @@ class ChatMessage {
       clientMessageId:
           (json['client_message_id'] ?? json['clientMessageId']) as String,
       body: json['body'] as String,
-      createdAt: DateTime.parse(
-        (json['created_at'] ?? json['createdAt']) as String,
-      ).toLocal(),
+      type:
+          json['message_type'] == 'image'
+              ? ChatMessageType.image
+              : ChatMessageType.text,
+      imageUrl: json['image_url'] as String?,
+      imageMimeType: json['attachment_mime_type'] as String?,
+      createdAt:
+          DateTime.parse(
+            (json['created_at'] ?? json['createdAt']) as String,
+          ).toLocal(),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'chat_message.dart';
 
 typedef MessageListener = void Function(ChatMessage message);
@@ -25,6 +27,14 @@ abstract interface class ChatRepository {
     required String roomId,
     required String clientMessageId,
     required String body,
+  });
+
+  Future<ChatMessage> sendImage({
+    required String roomId,
+    required String clientMessageId,
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
   });
 
   Future<ChatSubscription> subscribe({

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/chat_constants.dart';
@@ -8,6 +10,7 @@ class SupabaseChatRepository implements ChatRepository {
   SupabaseChatRepository(this._client);
 
   final SupabaseClient _client;
+  static const _imageBucket = 'chat-images';
 
   @override
   Future<String> joinPublicRoom() async {
@@ -38,7 +41,7 @@ class SupabaseChatRepository implements ChatRepository {
         'p_limit': limit,
       },
     );
-    return _messages(rows);
+    return _messagesWithUrls(rows);
   }
 
   @override
@@ -54,7 +57,7 @@ class SupabaseChatRepository implements ChatRepository {
         'p_after_id': after.id,
       },
     );
-    return _messages(rows);
+    return _messagesWithUrls(rows);
   }
 
   @override
@@ -65,17 +68,79 @@ class SupabaseChatRepository implements ChatRepository {
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('로그인이 필요합니다.');
-    final row = await _client
-        .from('messages')
-        .upsert({
-          'room_id': roomId,
-          'sender_id': user.id,
-          'client_message_id': clientMessageId,
-          'body': body.trim(),
-        }, onConflict: 'sender_id,client_message_id')
-        .select('*, profiles!messages_sender_id_fkey(nickname)')
-        .single();
+    final row =
+        await _client
+            .from('messages')
+            .upsert({
+              'room_id': roomId,
+              'sender_id': user.id,
+              'client_message_id': clientMessageId,
+              'body': body.trim(),
+            }, onConflict: 'sender_id,client_message_id')
+            .select('*, profiles!messages_sender_id_fkey(nickname)')
+            .single();
     return _message(row);
+  }
+
+  @override
+  Future<ChatMessage> sendImage({
+    required String roomId,
+    required String clientMessageId,
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+  }) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw const AuthException('로그인이 필요합니다.');
+    final extension = _extensionFor(mimeType);
+    final storagePath = '$roomId/${user.id}/$clientMessageId/image.$extension';
+    var uploaded = false;
+    try {
+      await _client.storage
+          .from(_imageBucket)
+          .uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: FileOptions(contentType: mimeType, upsert: false),
+          );
+      uploaded = true;
+      final messageId = await _client.rpc(
+        'create_image_message',
+        params: {
+          'p_room_id': roomId,
+          'p_client_message_id': clientMessageId,
+          'p_storage_path': storagePath,
+          'p_mime_type': mimeType,
+          'p_size_bytes': bytes.length,
+        },
+      );
+      return _fetchMessage(messageId as String);
+    } on StorageException catch (error) {
+      if (error.statusCode == '409' ||
+          error.message.contains('already exists')) {
+        final messageId = await _client.rpc(
+          'create_image_message',
+          params: {
+            'p_room_id': roomId,
+            'p_client_message_id': clientMessageId,
+            'p_storage_path': storagePath,
+            'p_mime_type': mimeType,
+            'p_size_bytes': bytes.length,
+          },
+        );
+        return _fetchMessage(messageId as String);
+      }
+      rethrow;
+    } catch (_) {
+      if (uploaded) {
+        try {
+          await _client.storage.from(_imageBucket).remove([storagePath]);
+        } catch (_) {
+          // A periodic cleanup can remove an orphan if best-effort cleanup fails.
+        }
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -98,12 +163,16 @@ class SupabaseChatRepository implements ChatRepository {
           callback: (payload) async {
             final id = payload.newRecord['id'] as String?;
             if (id == null) return;
-            final row = await _client
-                .from('messages')
-                .select('*, profiles!messages_sender_id_fkey(nickname)')
-                .eq('id', id)
-                .single();
-            onMessage(_message(row));
+            final row =
+                await _client
+                    .from('messages')
+                    .select(
+                      '*, profiles!messages_sender_id_fkey(nickname), '
+                      'message_attachments(*)',
+                    )
+                    .eq('id', id)
+                    .single();
+            onMessage(await _messageWithUrl(row));
           },
         )
         .subscribe((status, error) {
@@ -112,9 +181,51 @@ class SupabaseChatRepository implements ChatRepository {
     return _SupabaseChatSubscription(_client, channel);
   }
 
-  List<ChatMessage> _messages(dynamic rows) => (rows as List)
-      .map((row) => _message(Map<String, dynamic>.from(row as Map)))
-      .toList();
+  Future<List<ChatMessage>> _messagesWithUrls(dynamic rows) => Future.wait(
+    (rows as List).map(
+      (row) => _messageWithUrl(Map<String, dynamic>.from(row as Map)),
+    ),
+  );
+
+  Future<ChatMessage> _fetchMessage(String id) async {
+    final row =
+        await _client
+            .from('messages')
+            .select(
+              '*, profiles!messages_sender_id_fkey(nickname), '
+              'message_attachments(*)',
+            )
+            .eq('id', id)
+            .single();
+    return _messageWithUrl(row);
+  }
+
+  Future<ChatMessage> _messageWithUrl(Map<String, dynamic> row) async {
+    final attachments = row['message_attachments'];
+    final attachment =
+        attachments is List && attachments.isNotEmpty
+            ? Map<String, dynamic>.from(attachments.first as Map)
+            : null;
+    final path =
+        (row['attachment_path'] ?? attachment?['storage_path']) as String?;
+    String? imageUrl;
+    if (path != null) {
+      imageUrl = await _client.storage
+          .from(
+            (row['attachment_bucket'] ??
+                    attachment?['storage_bucket'] ??
+                    _imageBucket)
+                as String,
+          )
+          .createSignedUrl(path, 3600);
+    }
+    return _message({
+      ...row,
+      'image_url': imageUrl,
+      'attachment_mime_type':
+          row['attachment_mime_type'] ?? attachment?['mime_type'],
+    });
+  }
 
   ChatMessage _message(Map<String, dynamic> row) {
     final profile = row['profiles'];
@@ -123,6 +234,13 @@ class SupabaseChatRepository implements ChatRepository {
       'sender_nickname': profile is Map ? profile['nickname'] : null,
     });
   }
+
+  String _extensionFor(String mimeType) => switch (mimeType) {
+    'image/jpeg' => 'jpg',
+    'image/png' => 'png',
+    'image/webp' => 'webp',
+    _ => throw ArgumentError.value(mimeType, 'mimeType', '지원하지 않는 이미지 형식'),
+  };
 }
 
 class _SupabaseChatSubscription implements ChatSubscription {

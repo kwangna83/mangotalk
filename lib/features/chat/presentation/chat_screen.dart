@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/chat_constants.dart';
 import '../../../core/theme/app_theme.dart';
@@ -14,8 +15,10 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
+  static const _maxImageBytes = 10 * 1024 * 1024;
   final _text = TextEditingController();
   final _scroll = ScrollController();
+  final _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -42,38 +45,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           _Header(
-            onSignOut: () =>
-                ref.read(authControllerProvider.notifier).signOut(),
+            onSignOut:
+                () => ref.read(authControllerProvider.notifier).signOut(),
           ),
           Expanded(
             child: chat.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => Center(
-                child: FilledButton(
-                  onPressed: () => ref.invalidate(chatControllerProvider),
-                  child: const Text('다시 연결하기'),
-                ),
-              ),
-              data: (value) => value.messages.isEmpty
-                  ? const _EmptyChat()
-                  : ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                      itemCount: value.messages.length,
-                      itemBuilder: (context, index) {
-                        final message = value.messages[index];
-                        return _MessageBubble(
-                          message: message,
-                          isMine: message.senderId == me?.id,
-                          onRetry: () => ref
-                              .read(chatControllerProvider.notifier)
-                              .retry(message),
-                        );
-                      },
+              error:
+                  (_, _) => Center(
+                    child: FilledButton(
+                      onPressed: () => ref.invalidate(chatControllerProvider),
+                      child: const Text('다시 연결하기'),
                     ),
+                  ),
+              data:
+                  (value) =>
+                      value.messages.isEmpty
+                          ? const _EmptyChat()
+                          : ListView.builder(
+                            controller: _scroll,
+                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                            itemCount: value.messages.length,
+                            itemBuilder: (context, index) {
+                              final message = value.messages[index];
+                              return _MessageBubble(
+                                message: message,
+                                isMine: message.senderId == me?.id,
+                                onRetry:
+                                    () => ref
+                                        .read(chatControllerProvider.notifier)
+                                        .retry(message),
+                              );
+                            },
+                          ),
             ),
           ),
-          _Composer(controller: _text, onSend: _send),
+          _Composer(controller: _text, onSend: _send, onPickImage: _pickImage),
         ],
       ),
     );
@@ -88,13 +95,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (_scroll.hasClients) {
         _scroll.animateTo(
           _scroll.position.maxScrollExtent,
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 220),
+          duration:
+              MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
           curve: Curves.easeOut,
         );
       }
     });
+  }
+
+  Future<void> _pickImage() async {
+    final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final mimeType = _imageMimeType(file);
+    if (mimeType == null) {
+      _showImageError('JPEG, PNG, WebP 이미지만 올릴 수 있어요.');
+      return;
+    }
+    if (bytes.isEmpty || bytes.length > _maxImageBytes) {
+      _showImageError('이미지는 10MB 이하만 올릴 수 있어요.');
+      return;
+    }
+    await ref
+        .read(chatControllerProvider.notifier)
+        .sendImage(bytes: bytes, fileName: file.name, mimeType: mimeType);
+  }
+
+  String? _imageMimeType(XFile file) {
+    final declared = file.mimeType?.toLowerCase();
+    if (const {'image/jpeg', 'image/png', 'image/webp'}.contains(declared)) {
+      return declared;
+    }
+    final name = file.name.toLowerCase();
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.webp')) return 'image/webp';
+    return null;
+  }
+
+  void _showImageError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -153,7 +198,10 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '${message.senderNickname}의 메시지: ${message.body}',
+    label:
+        message.type == ChatMessageType.image
+            ? '${message.senderNickname}의 이미지 메시지'
+            : '${message.senderNickname}의 메시지: ${message.body}',
     child: Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
@@ -174,9 +222,8 @@ class _MessageBubble extends StatelessWidget {
             ],
             Flexible(
               child: Column(
-                crossAxisAlignment: isMine
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
                   if (!isMine)
                     Padding(
@@ -188,10 +235,13 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   Container(
                     constraints: const BoxConstraints(maxWidth: 310),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 11,
-                    ),
+                    padding:
+                        message.type == ChatMessageType.image
+                            ? const EdgeInsets.all(4)
+                            : const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 11,
+                            ),
                     decoration: BoxDecoration(
                       color: isMine ? AppColors.leaf : Colors.white,
                       borderRadius: BorderRadius.circular(20).copyWith(
@@ -199,18 +249,22 @@ class _MessageBubble extends StatelessWidget {
                         bottomLeft: isMine ? null : const Radius.circular(5),
                       ),
                     ),
-                    child: Text(
-                      message.body,
-                      style: TextStyle(
-                        color: isMine ? Colors.white : AppColors.ink,
-                      ),
-                    ),
+                    child:
+                        message.type == ChatMessageType.image
+                            ? _MessageImage(message: message)
+                            : Text(
+                              message.body,
+                              style: TextStyle(
+                                color: isMine ? Colors.white : AppColors.ink,
+                              ),
+                            ),
                   ),
                   if (message.status != MessageSendStatus.sent)
                     TextButton.icon(
-                      onPressed: message.status == MessageSendStatus.failed
-                          ? onRetry
-                          : null,
+                      onPressed:
+                          message.status == MessageSendStatus.failed
+                              ? onRetry
+                              : null,
                       icon: Icon(
                         message.status == MessageSendStatus.failed
                             ? Icons.refresh_rounded
@@ -232,10 +286,66 @@ class _MessageBubble extends StatelessWidget {
   );
 }
 
+class _MessageImage extends StatelessWidget {
+  const _MessageImage({required this.message});
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = message.localImageBytes;
+    final imageUrl = message.imageUrl;
+    Widget image;
+    if (bytes != null) {
+      image = Image.memory(bytes, fit: BoxFit.cover);
+    } else if (imageUrl != null) {
+      image = Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        loadingBuilder:
+            (context, child, progress) =>
+                progress == null
+                    ? child
+                    : const Center(child: CircularProgressIndicator()),
+        errorBuilder: (_, _, _) => const _ImageError(),
+      );
+    } else {
+      image = const _ImageError();
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(width: 240, height: 200, child: image),
+    );
+  }
+}
+
+class _ImageError extends StatelessWidget {
+  const _ImageError();
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(
+    color: Color(0xFFF1ECFF),
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.broken_image_outlined, color: AppColors.purple),
+          SizedBox(height: 6),
+          Text('이미지를 불러올 수 없어요'),
+        ],
+      ),
+    ),
+  );
+}
+
 class _Composer extends StatelessWidget {
-  const _Composer({required this.controller, required this.onSend});
+  const _Composer({
+    required this.controller,
+    required this.onSend,
+    required this.onPickImage,
+  });
   final TextEditingController controller;
   final VoidCallback onSend;
+  final VoidCallback onPickImage;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -245,6 +355,12 @@ class _Composer extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          IconButton(
+            tooltip: '이미지 올리기',
+            onPressed: onPickImage,
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+          ),
+          const SizedBox(width: 4),
           Expanded(
             child: TextField(
               controller: controller,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -114,7 +115,53 @@ class ChatController extends AsyncNotifier<ChatState> {
   }
 
   Future<void> retry(ChatMessage message) =>
-      send(message.body, clientMessageId: message.clientMessageId);
+      message.type == ChatMessageType.image && message.localImageBytes != null
+          ? sendImage(
+            bytes: message.localImageBytes!,
+            fileName: 'retry-image',
+            mimeType: message.imageMimeType!,
+            clientMessageId: message.clientMessageId,
+          )
+          : send(message.body, clientMessageId: message.clientMessageId);
+
+  Future<void> sendImage({
+    required Uint8List bytes,
+    required String fileName,
+    required String mimeType,
+    String? clientMessageId,
+  }) async {
+    final current = state.value;
+    final user = ref.read(authControllerProvider).value;
+    if (current?.roomId == null || user == null) return;
+    final clientId = clientMessageId ?? const Uuid().v4();
+    final optimistic = ChatMessage(
+      id: 'local:$clientId',
+      roomId: current!.roomId!,
+      senderId: user.id,
+      senderNickname: user.nickname,
+      clientMessageId: clientId,
+      body: '이미지',
+      createdAt: DateTime.now(),
+      type: ChatMessageType.image,
+      localImageBytes: bytes,
+      imageMimeType: mimeType,
+      status: MessageSendStatus.sending,
+    );
+    _merge(optimistic);
+    try {
+      _merge(
+        await _repository.sendImage(
+          roomId: current.roomId!,
+          clientMessageId: clientId,
+          bytes: bytes,
+          fileName: fileName,
+          mimeType: mimeType,
+        ),
+      );
+    } catch (_) {
+      _replaceStatus(clientId, MessageSendStatus.failed);
+    }
+  }
 
   void _merge(ChatMessage message) {
     final current = state.value;
@@ -129,13 +176,15 @@ class ChatController extends AsyncNotifier<ChatState> {
     if (current == null) return;
     state = AsyncData(
       current.copyWith(
-        messages: current.messages
-            .map(
-              (m) => m.clientMessageId == clientId
-                  ? m.copyWith(status: status)
-                  : m,
-            )
-            .toList(),
+        messages:
+            current.messages
+                .map(
+                  (m) =>
+                      m.clientMessageId == clientId
+                          ? m.copyWith(status: status)
+                          : m,
+                )
+                .toList(),
       ),
     );
   }

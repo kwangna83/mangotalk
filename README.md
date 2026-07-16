@@ -11,14 +11,15 @@ Flutter와 Supabase로 만드는 간단한 실시간 그룹 채팅 MVP입니다.
 - Supabase Postgres 영구 메시지 저장 및 Realtime 수신
 - 50개 단위 cursor 페이지네이션
 - 낙관적 전송, 실패 표시와 같은 client message ID 재시도
+- JPEG·PNG·WebP 이미지 선택, 비공개 Storage 업로드와 이미지 메시지
 - Material 3 Expressive Community UI
-- profiles/chat_rooms/room_members/messages 스키마와 RLS migration
+- profiles/chat_rooms/room_members/messages/message_attachments 스키마와 RLS migration
 
 ## Supabase Free 설정
 
 1. Supabase Dashboard에서 `mangotalk-dev` 프로젝트를 생성합니다.
 2. Authentication 설정에서 Anonymous Sign-Ins를 활성화합니다.
-3. SQL Editor에서 `supabase/migrations/202607150001_initial_chat.sql`을 실행합니다.
+3. SQL Editor에서 `supabase/migrations`의 SQL 파일을 파일명 순서대로 실행합니다.
 4. Project Settings의 API 화면에서 Project URL과 Publishable key를 확인합니다.
 
 Publishable key는 앱에 포함해도 되는 공개 식별 키지만, 데이터 보호는 반드시 RLS 정책으로 수행해야 합니다. `service_role` 키는 앱이나 Git에 절대 넣지 마세요.

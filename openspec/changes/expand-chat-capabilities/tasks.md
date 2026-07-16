@@ -17,18 +17,18 @@
 
 ## 3. 이미지 데이터와 Storage — GitHub #1
 
-- [ ] 3.1 private `chat-images` 버킷과 JPEG/PNG/WebP, 10MB 제한을 migration에 추가한다
-- [ ] 3.2 `message_attachments` 테이블과 이미지 메시지 타입별 제약을 추가한다
-- [ ] 3.3 방 참여자 읽기와 본인 경로 쓰기만 허용하는 DB/Storage RLS를 구현한다
-- [ ] 3.4 이미지 메시지와 첨부 메타데이터를 멱등하게 확정하는 RPC를 구현한다
+- [x] 3.1 private `chat-images` 버킷과 JPEG/PNG/WebP, 10MB 제한을 migration에 추가한다
+- [x] 3.2 `message_attachments` 테이블과 이미지 메시지 타입별 제약을 추가한다
+- [x] 3.3 방 참여자 읽기와 본인 경로 쓰기만 허용하는 DB/Storage RLS를 구현한다
+- [x] 3.4 이미지 메시지와 첨부 메타데이터를 멱등하게 확정하는 RPC를 구현한다
 - [ ] 3.5 비참여자, 경로 위조, 크기/형식 위반과 중복 재시도 통합 테스트를 작성한다
 
 ## 4. 이미지 메시지 앱 — GitHub #1
 
-- [ ] 4.1 플랫폼별 이미지 선택과 공통 파일 검증 abstraction을 구현한다
+- [x] 4.1 플랫폼별 이미지 선택과 공통 파일 검증 abstraction을 구현한다
 - [ ] 4.2 이미지 업로드, signed URL 발급과 재발급 repository 동작을 구현한다
 - [ ] 4.3 이미지 선택·미리보기·취소와 업로드 진행 상태 UI를 구현한다
-- [ ] 4.4 이미지 메시지 버블, 로딩 placeholder와 접근성 설명을 구현한다
+- [x] 4.4 이미지 메시지 버블, 로딩 placeholder와 접근성 설명을 구현한다
 - [ ] 4.5 업로드/저장 실패 재시도와 참조되지 않은 객체 정리 동작을 구현한다
 - [ ] 4.6 Realtime 병합, 이전 내역, URL 만료와 오류 상태 테스트를 작성한다
 
