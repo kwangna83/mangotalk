@@ -1,5 +1,7 @@
 # MangoTalk
 
+[현재 시스템 구성도](docs/system-architecture.md)
+
 Flutter와 Supabase로 만드는 간단한 실시간 그룹 채팅 MVP입니다. iOS를 우선 지원하며 Android 프로젝트도 함께 포함합니다.
 
 ## 현재 구현
