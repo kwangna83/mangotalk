@@ -21,6 +21,9 @@ migration:
     - platform: ios
       create_revision: ee80f08bbf97172ec030b8751ceab557177a34a6
       base_revision: ee80f08bbf97172ec030b8751ceab557177a34a6
+    - platform: web
+      create_revision: ea121f8859e4b13e47a8f845e4586164519588bc
+      base_revision: ea121f8859e4b13e47a8f845e4586164519588bc
 
   # User provided section
 

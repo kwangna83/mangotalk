@@ -28,6 +28,15 @@ flutter pub get
 flutter run --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
 ```
 
+웹에서는 Chrome 실행 또는 정적 배포용 빌드를 사용할 수 있습니다.
+
+```powershell
+flutter run -d chrome --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+flutter build web --release --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+```
+
+빌드 결과는 `build/web`에 생성됩니다. HTTPS로 배포한 뒤 iPhone Safari의 공유 메뉴에서 **홈 화면에 추가**를 선택하면 standalone 웹 앱으로 실행할 수 있습니다.
+
 로컬 값의 이름은 `.env.example`을 참고하세요. 이 앱은 `.env` 파일을 자동으로 읽지 않으며 빌드 시 `--dart-define`으로 주입합니다. 실제 값이 들어간 파일은 Git에 커밋하지 않습니다.
 
 ## 검증
