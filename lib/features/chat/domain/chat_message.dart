@@ -13,6 +13,7 @@ class ChatMessage {
     required this.clientMessageId,
     required this.body,
     required this.createdAt,
+    this.senderAvatarUrl,
     this.type = ChatMessageType.text,
     this.imageUrl,
     this.localImageBytes,
@@ -27,6 +28,7 @@ class ChatMessage {
   final String clientMessageId;
   final String body;
   final DateTime createdAt;
+  final String? senderAvatarUrl;
   final ChatMessageType type;
   final String? imageUrl;
   final Uint8List? localImageBytes;
@@ -47,6 +49,7 @@ class ChatMessage {
       clientMessageId: clientMessageId,
       body: body,
       createdAt: createdAt ?? this.createdAt,
+      senderAvatarUrl: senderAvatarUrl,
       type: type,
       imageUrl: imageUrl ?? this.imageUrl,
       localImageBytes: localImageBytes,
@@ -63,6 +66,8 @@ class ChatMessage {
       senderNickname:
           (json['sender_nickname'] ?? json['senderNickname'] ?? '알 수 없음')
               as String,
+      senderAvatarUrl:
+          (json['sender_avatar_url'] ?? json['senderAvatarUrl']) as String?,
       clientMessageId:
           (json['client_message_id'] ?? json['clientMessageId']) as String,
       body: json['body'] as String,

@@ -68,12 +68,15 @@ class _NicknameScreenState extends ConsumerState<NicknameScreen> {
                     const SizedBox(height: 12),
                     FilledButton.icon(
                       onPressed: auth.isLoading ? null : _submit,
-                      icon: auth.isLoading
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.arrow_forward_rounded),
+                      icon:
+                          auth.isLoading
+                              ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.arrow_forward_rounded),
                       label: const Text('채팅 시작하기'),
                     ),
                   ],

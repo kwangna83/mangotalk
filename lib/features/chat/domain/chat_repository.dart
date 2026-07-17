@@ -23,6 +23,13 @@ abstract interface class ChatRepository {
     required MessageCursor after,
   });
 
+  Future<MessageCursor?> fetchReadPosition({required String roomId});
+
+  Future<void> markRead({
+    required String roomId,
+    required MessageCursor position,
+  });
+
   Future<ChatMessage> sendMessage({
     required String roomId,
     required String clientMessageId,

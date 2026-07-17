@@ -30,7 +30,7 @@ MVP 데이터 모델은 이미 `chat_rooms`와 `room_members`를 분리하고 `m
 
 Riverpod에 방 목록과 `selectedRoomId` 상태를 추가한다. 방 전환 시 기존 Realtime 채널을 해제하고 새 방 필터로 구독한 다음 최근 메시지를 조회한다. 비동기 응답에는 방 ID를 함께 검사해 늦게 도착한 이전 방 응답이 현재 화면을 덮어쓰지 않게 한다.
 
-방별 메시지 cursor와 캐시는 방 ID를 key로 분리한다. 첫 구현에서는 메모리 캐시만 사용하고 읽지 않은 개수는 계산하지 않는다.
+방별 메시지 cursor와 캐시는 방 ID를 key로 분리한다. `message_read_positions`에는 사용자·방별 마지막 읽음 `(created_at, message_id)` cursor를 저장한다. 재입장 시 저장된 위치 이후의 다른 사용자 메시지를 계산해 첫 항목 앞에 구분선을 표시하고, 현재 화면에서 확인한 최신 메시지는 과거 위치로 회귀하지 않는 RPC로 갱신한다.
 
 ### 첨부 메타데이터와 비공개 Storage
 

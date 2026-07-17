@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/chat_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/validation/input_validators.dart';
+import '../../auth/domain/app_user.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/chat_message.dart';
 import 'chat_controller.dart';
@@ -19,6 +23,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _text = TextEditingController();
   final _scroll = ScrollController();
   final _imagePicker = ImagePicker();
+  final _initialFocusKey = GlobalKey();
+  bool _positionedAfterLoad = false;
+  String? _latestMessageId;
 
   @override
   void initState() {
@@ -40,49 +47,76 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final chat = ref.watch(chatControllerProvider);
+    if (chat.isLoading) {
+      _positionedAfterLoad = false;
+      _latestMessageId = null;
+    }
     final me = ref.watch(authControllerProvider).value;
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final loadedChat = chat.value;
+    if (loadedChat != null && loadedChat.messages.isNotEmpty) {
+      _scheduleInitialFocus(hasUnread: loadedChat.firstUnreadMessageId != null);
+    }
     return Scaffold(
-      body: Column(
-        children: [
-          _Header(
-            onRefresh: () => ref.invalidate(chatControllerProvider),
-            onSignOut:
-                () => ref.read(authControllerProvider.notifier).signOut(),
-          ),
-          Expanded(
-            child: chat.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error:
-                  (_, _) => Center(
-                    child: FilledButton(
-                      onPressed: () => ref.invalidate(chatControllerProvider),
-                      child: const Text('다시 연결하기'),
-                    ),
-                  ),
-              data:
-                  (value) =>
-                      value.messages.isEmpty
-                          ? const _EmptyChat()
-                          : ListView.builder(
-                            controller: _scroll,
-                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                            itemCount: value.messages.length,
-                            itemBuilder: (context, index) {
-                              final message = value.messages[index];
-                              return _MessageBubble(
-                                message: message,
-                                isMine: message.senderId == me?.id,
-                                onRetry:
-                                    () => ref
-                                        .read(chatControllerProvider.notifier)
-                                        .retry(message),
-                              );
-                            },
-                          ),
+      resizeToAvoidBottomInset: false,
+      body: AnimatedPadding(
+        padding: EdgeInsets.only(bottom: keyboardHeight),
+        duration:
+            reduceMotion ? Duration.zero : const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: Column(
+          children: [
+            _Header(
+              user: me,
+              onRefresh: () => ref.invalidate(chatControllerProvider),
+              onEditProfile: me == null ? null : () => _editProfile(me),
+              onSignOut:
+                  () => ref.read(authControllerProvider.notifier).signOut(),
             ),
-          ),
-          _Composer(controller: _text, onSend: _send, onPickImage: _pickImage),
-        ],
+            Expanded(
+              child: chat.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error:
+                    (_, _) => Center(
+                      child: FilledButton(
+                        onPressed: () => ref.invalidate(chatControllerProvider),
+                        child: const Text('다시 연결하기'),
+                      ),
+                    ),
+                data:
+                    (value) =>
+                        value.messages.isEmpty
+                            ? const _EmptyChat()
+                            : ListView(
+                              controller: _scroll,
+                              cacheExtent: 0,
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                20,
+                                16,
+                                12,
+                              ),
+                              children: [
+                                for (final message in value.messages)
+                                  _messageItem(
+                                    message: message,
+                                    value: value,
+                                    myUserId: me?.id,
+                                  ),
+                              ],
+                            ),
+              ),
+            ),
+            _Composer(
+              controller: _text,
+              onSend: _send,
+              onPickImage: _pickImage,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -104,6 +138,100 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         );
       }
     });
+  }
+
+  Widget _messageItem({
+    required ChatMessage message,
+    required ChatState value,
+    required String? myUserId,
+  }) {
+    if (message.id == value.messages.last.id) {
+      _handleLatestMessage(message.id, isMine: message.senderId == myUserId);
+    }
+    final focusMessageId = value.firstUnreadMessageId ?? value.messages.last.id;
+    final isInitialFocus = message.id == focusMessageId;
+    return KeyedSubtree(
+      key: isInitialFocus ? _initialFocusKey : null,
+      child: Column(
+        children: [
+          if (message.id == value.firstUnreadMessageId)
+            _UnreadDivider(count: value.unreadCount),
+          _MessageBubble(
+            message: message,
+            isMine: message.senderId == myUserId,
+            onRetry:
+                () => ref.read(chatControllerProvider.notifier).retry(message),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _scheduleInitialFocus({required bool hasUnread}) {
+    if (_positionedAfterLoad) return;
+    _positionedAfterLoad = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!hasUnread) {
+        if (_scroll.hasClients) {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+        return;
+      }
+      final targetContext = _initialFocusKey.currentContext;
+      if (targetContext == null) return;
+      Scrollable.ensureVisible(
+        targetContext,
+        alignment: .08,
+        duration: Duration.zero,
+      );
+    });
+  }
+
+  void _handleLatestMessage(String messageId, {required bool isMine}) {
+    if (_latestMessageId == null) {
+      _latestMessageId = messageId;
+      return;
+    }
+    if (_latestMessageId == messageId) return;
+    final shouldFollow =
+        isMine ||
+        !_scroll.hasClients ||
+        _scroll.position.maxScrollExtent - _scroll.position.pixels <= 120;
+    _latestMessageId = messageId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (shouldFollow) {
+        _scrollToLatest();
+      } else {
+        _showNewMessageNotice();
+      }
+    });
+  }
+
+  void _scrollToLatest() {
+    if (!_scroll.hasClients) return;
+    _scroll.animateTo(
+      _scroll.position.maxScrollExtent,
+      duration:
+          MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _showNewMessageNotice() {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('새 메시지가 도착했어요.'),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(label: '보기', onPressed: _scrollToLatest),
+        ),
+      );
   }
 
   Future<void> _pickImage() async {
@@ -142,11 +270,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
+
+  Future<void> _editProfile(AppUser user) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _ProfileDialog(user: user),
+    );
+    if (changed == true) ref.invalidate(chatControllerProvider);
+  }
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onRefresh, required this.onSignOut});
+  const _Header({
+    required this.user,
+    required this.onRefresh,
+    required this.onEditProfile,
+    required this.onSignOut,
+  });
+  final AppUser? user;
   final VoidCallback onRefresh;
+  final VoidCallback? onEditProfile;
   final VoidCallback onSignOut;
 
   @override
@@ -164,9 +307,20 @@ class _Header extends StatelessWidget {
     ),
     child: Row(
       children: [
-        const CircleAvatar(
+        _Avatar(
+          nickname: user?.nickname ?? 'M',
+          imageUrl: user?.avatarUrl,
+          radius: 22,
           backgroundColor: Colors.white,
-          child: Icon(Icons.forum_rounded, color: AppColors.leaf),
+          onTap:
+              user?.avatarUrl == null
+                  ? onEditProfile
+                  : () => _showAvatarViewer(
+                    context,
+                    user!.avatarUrl!,
+                    user!.nickname,
+                  ),
+          tooltip: user?.avatarUrl == null ? '내 프로필 수정' : '프로필 사진 크게 보기',
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -179,6 +333,11 @@ class _Header extends StatelessWidget {
           ),
         ),
         IconButton(
+          tooltip: '내 프로필 수정',
+          onPressed: onEditProfile,
+          icon: const Icon(Icons.manage_accounts_rounded),
+        ),
+        IconButton(
           tooltip: '채팅 새로고침',
           onPressed: onRefresh,
           icon: const Icon(Icons.refresh_rounded),
@@ -188,6 +347,293 @@ class _Header extends StatelessWidget {
           onPressed: onSignOut,
           icon: const Icon(Icons.logout_rounded),
         ),
+      ],
+    ),
+  );
+}
+
+class _Avatar extends StatelessWidget {
+  const _Avatar({
+    required this.nickname,
+    required this.imageUrl,
+    required this.radius,
+    required this.backgroundColor,
+    this.onTap,
+    this.tooltip,
+  });
+
+  final String nickname;
+  final String? imageUrl;
+  final double radius;
+  final Color backgroundColor;
+  final VoidCallback? onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = CircleAvatar(
+      radius: radius,
+      backgroundColor: backgroundColor,
+      foregroundImage: imageUrl == null ? null : NetworkImage(imageUrl!),
+      child:
+          imageUrl == null
+              ? Text(nickname.characters.first.toUpperCase())
+              : null,
+    );
+    if (onTap == null) return avatar;
+    final button = Semantics(
+      button: true,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: avatar,
+      ),
+    );
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
+  }
+}
+
+Future<void> _showAvatarViewer(
+  BuildContext context,
+  String imageUrl,
+  String nickname,
+) => showDialog<void>(
+  context: context,
+  barrierColor: Colors.black.withValues(alpha: .92),
+  builder:
+      (context) => Dialog.fullscreen(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: .5,
+                maxScale: 5,
+                child: Center(
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    semanticLabel: '$nickname의 프로필 사진',
+                    errorBuilder: (_, _, _) => const _ImageError(),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 12,
+              child: IconButton.filledTonal(
+                tooltip: '닫기',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ],
+        ),
+      ),
+);
+
+class _ProfileDialog extends ConsumerStatefulWidget {
+  const _ProfileDialog({required this.user});
+  final AppUser user;
+
+  @override
+  ConsumerState<_ProfileDialog> createState() => _ProfileDialogState();
+}
+
+class _ProfileDialogState extends ConsumerState<_ProfileDialog> {
+  static const _maxAvatarBytes = 5 * 1024 * 1024;
+  final _formKey = GlobalKey<FormState>();
+  final _picker = ImagePicker();
+  late final TextEditingController _nickname;
+  Uint8List? _avatarBytes;
+  String? _avatarMimeType;
+  bool _deleteAvatar = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nickname = TextEditingController(text: widget.user.nickname);
+  }
+
+  @override
+  void dispose() {
+    _nickname.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('내 프로필'),
+    content: Form(
+      key: _formKey,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _preview(),
+            const SizedBox(height: 12),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: _saving ? null : _pickAvatar,
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    widget.user.avatarUrl == null ? '사진 등록' : '사진 변경',
+                  ),
+                ),
+                if (widget.user.avatarUrl != null || _avatarBytes != null)
+                  TextButton.icon(
+                    onPressed: _saving ? null : _removeAvatar,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('사진 삭제'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _nickname,
+              maxLength: 20,
+              decoration: const InputDecoration(labelText: '닉네임'),
+              validator: InputValidators.nickname,
+            ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+        child: const Text('취소'),
+      ),
+      FilledButton(
+        onPressed: _saving ? null : _save,
+        child:
+            _saving
+                ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : const Text('저장'),
+      ),
+    ],
+  );
+
+  Widget _preview() {
+    final provider =
+        _avatarBytes != null
+            ? MemoryImage(_avatarBytes!) as ImageProvider
+            : (!_deleteAvatar && widget.user.avatarUrl != null
+                ? NetworkImage(widget.user.avatarUrl!)
+                : null);
+    return CircleAvatar(
+      radius: 52,
+      backgroundColor: AppColors.purple.withValues(alpha: .14),
+      foregroundImage: provider,
+      child:
+          provider == null
+              ? Text(
+                _nickname.text.trim().isEmpty
+                    ? '?'
+                    : _nickname.text.trim().characters.first.toUpperCase(),
+                style: const TextStyle(fontSize: 32),
+              )
+              : null,
+    );
+  }
+
+  Future<void> _pickAvatar() async {
+    final file = await _picker.pickImage(source: ImageSource.gallery);
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    final mimeType = _avatarMime(file);
+    if (mimeType == null || bytes.isEmpty || bytes.length > _maxAvatarBytes) {
+      _showError(
+        mimeType == null
+            ? 'JPEG, PNG, WebP 이미지만 사용할 수 있어요.'
+            : '사진은 5MB 이하만 사용할 수 있어요.',
+      );
+      return;
+    }
+    setState(() {
+      _avatarBytes = bytes;
+      _avatarMimeType = mimeType;
+      _deleteAvatar = false;
+    });
+  }
+
+  void _removeAvatar() => setState(() {
+    _avatarBytes = null;
+    _avatarMimeType = null;
+    _deleteAvatar = true;
+  });
+
+  Future<void> _save() async {
+    if (_formKey.currentState?.validate() != true) return;
+    setState(() => _saving = true);
+    final success = await ref
+        .read(authControllerProvider.notifier)
+        .updateProfile(
+          nickname: _nickname.text,
+          avatarBytes: _avatarBytes,
+          avatarMimeType: _avatarMimeType,
+          deleteAvatar: _deleteAvatar,
+        );
+    if (!mounted) return;
+    if (success) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() => _saving = false);
+      _showError('프로필을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  }
+
+  String? _avatarMime(XFile file) {
+    final declared = file.mimeType?.toLowerCase();
+    if (const {'image/jpeg', 'image/png', 'image/webp'}.contains(declared)) {
+      return declared;
+    }
+    final name = file.name.toLowerCase();
+    if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
+    if (name.endsWith('.png')) return 'image/png';
+    if (name.endsWith('.webp')) return 'image/webp';
+    return null;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _UnreadDivider extends StatelessWidget {
+  const _UnreadDivider({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      children: [
+        const Expanded(child: Divider(color: AppColors.purple)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            '새 메시지 $count개',
+            style: const TextStyle(
+              color: AppColors.purple,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: AppColors.purple)),
       ],
     ),
   );
@@ -217,16 +663,7 @@ class _MessageBubble extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (!isMine) ...[
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.purple.withValues(alpha: .14),
-                child: Text(
-                  message.senderNickname.characters.first.toUpperCase(),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
+            if (!isMine) ...[_messageAvatar(context), const SizedBox(width: 8)],
             Flexible(
               child: Column(
                 crossAxisAlignment:
@@ -286,10 +723,27 @@ class _MessageBubble extends StatelessWidget {
                 ],
               ),
             ),
+            if (isMine) ...[const SizedBox(width: 8), _messageAvatar(context)],
           ],
         ),
       ),
     ),
+  );
+
+  Widget _messageAvatar(BuildContext context) => _Avatar(
+    radius: 16,
+    nickname: message.senderNickname,
+    imageUrl: message.senderAvatarUrl,
+    backgroundColor: AppColors.purple.withValues(alpha: .14),
+    onTap:
+        message.senderAvatarUrl == null
+            ? null
+            : () => _showAvatarViewer(
+              context,
+              message.senderAvatarUrl!,
+              message.senderNickname,
+            ),
+    tooltip: message.senderAvatarUrl == null ? null : '프로필 사진 크게 보기',
   );
 }
 

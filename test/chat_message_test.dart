@@ -7,6 +7,7 @@ void main() {
     'room_id': 'room-id',
     'sender_id': 'sender-id',
     'sender_nickname': '망고',
+    'sender_avatar_url': 'https://example.com/avatar.png',
     'client_message_id': 'client-id',
     'body': '안녕하세요',
     'created_at': '2026-07-16T00:00:00Z',
@@ -18,6 +19,7 @@ void main() {
     expect(message.type, ChatMessageType.text);
     expect(message.imageUrl, isNull);
     expect(message.body, '안녕하세요');
+    expect(message.senderAvatarUrl, 'https://example.com/avatar.png');
   });
 
   test('이미지 메시지와 signed URL을 변환한다', () {

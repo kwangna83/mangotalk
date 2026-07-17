@@ -11,6 +11,7 @@ class SupabaseChatRepository implements ChatRepository {
 
   final SupabaseClient _client;
   static const _imageBucket = 'chat-images';
+  static const _avatarBucket = 'profile-images';
 
   @override
   Future<String> joinPublicRoom() async {
@@ -61,6 +62,40 @@ class SupabaseChatRepository implements ChatRepository {
   }
 
   @override
+  Future<MessageCursor?> fetchReadPosition({required String roomId}) async {
+    final user = _client.auth.currentUser;
+    if (user == null) throw const AuthException('로그인이 필요합니다.');
+    final row =
+        await _client
+            .from('message_read_positions')
+            .select('last_read_created_at, last_read_message_id')
+            .eq('room_id', roomId)
+            .eq('user_id', user.id)
+            .maybeSingle();
+    if (row == null) return null;
+    return MessageCursor(
+      createdAt:
+          DateTime.parse(row['last_read_created_at'] as String).toLocal(),
+      id: row['last_read_message_id'] as String,
+    );
+  }
+
+  @override
+  Future<void> markRead({
+    required String roomId,
+    required MessageCursor position,
+  }) async {
+    await _client.rpc(
+      'mark_message_read',
+      params: {
+        'p_room_id': roomId,
+        'p_message_id': position.id,
+        'p_created_at': position.createdAt.toUtc().toIso8601String(),
+      },
+    );
+  }
+
+  @override
   Future<ChatMessage> sendMessage({
     required String roomId,
     required String clientMessageId,
@@ -77,7 +112,9 @@ class SupabaseChatRepository implements ChatRepository {
               'client_message_id': clientMessageId,
               'body': body.trim(),
             }, onConflict: 'sender_id,client_message_id')
-            .select('*, profiles!messages_sender_id_fkey(nickname)')
+            .select(
+              '*, profiles!messages_sender_id_fkey(nickname, avatar_path)',
+            )
             .single();
     return _message(row);
   }
@@ -167,7 +204,7 @@ class SupabaseChatRepository implements ChatRepository {
                 await _client
                     .from('messages')
                     .select(
-                      '*, profiles!messages_sender_id_fkey(nickname), '
+                      '*, profiles!messages_sender_id_fkey(nickname, avatar_path), '
                       'message_attachments(*)',
                     )
                     .eq('id', id)
@@ -192,7 +229,7 @@ class SupabaseChatRepository implements ChatRepository {
         await _client
             .from('messages')
             .select(
-              '*, profiles!messages_sender_id_fkey(nickname), '
+              '*, profiles!messages_sender_id_fkey(nickname, avatar_path), '
               'message_attachments(*)',
             )
             .eq('id', id)
@@ -233,9 +270,26 @@ class SupabaseChatRepository implements ChatRepository {
 
   ChatMessage _message(Map<String, dynamic> row) {
     final profile = row['profiles'];
+    final profileNickname = switch (profile) {
+      Map() => profile['nickname'],
+      List() when profile.isNotEmpty => (profile.first as Map)['nickname'],
+      _ => null,
+    };
+    final avatarPath =
+        switch (profile) {
+              Map() => profile['avatar_path'],
+              List() when profile.isNotEmpty =>
+                (profile.first as Map)['avatar_path'],
+              _ => row['sender_avatar_path'],
+            }
+            as String?;
     return ChatMessage.fromJson({
       ...row,
-      'sender_nickname': profile is Map ? profile['nickname'] : null,
+      'sender_nickname': profileNickname ?? row['sender_nickname'],
+      'sender_avatar_url':
+          avatarPath == null
+              ? null
+              : _client.storage.from(_avatarBucket).getPublicUrl(avatarPath),
     });
   }
 

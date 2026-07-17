@@ -16,23 +16,31 @@ class ChatState {
     this.roomId,
     this.loadingOlder = false,
     this.hasMore = true,
+    this.firstUnreadMessageId,
+    this.unreadCount = 0,
   });
 
   final List<ChatMessage> messages;
   final String? roomId;
   final bool loadingOlder;
   final bool hasMore;
+  final String? firstUnreadMessageId;
+  final int unreadCount;
 
   ChatState copyWith({
     List<ChatMessage>? messages,
     String? roomId,
     bool? loadingOlder,
     bool? hasMore,
+    String? firstUnreadMessageId,
+    int? unreadCount,
   }) => ChatState(
     messages: messages ?? this.messages,
     roomId: roomId ?? this.roomId,
     loadingOlder: loadingOlder ?? this.loadingOlder,
     hasMore: hasMore ?? this.hasMore,
+    firstUnreadMessageId: firstUnreadMessageId ?? this.firstUnreadMessageId,
+    unreadCount: unreadCount ?? this.unreadCount,
   );
 }
 
@@ -48,16 +56,36 @@ class ChatController extends AsyncNotifier<ChatState> {
   Future<ChatState> build() async {
     ref.onDispose(() => unawaited(_subscription?.cancel()));
     final roomId = await _repository.joinPublicRoom();
-    final messages = await _repository.fetchMessages(roomId: roomId);
+    final results = await Future.wait([
+      _repository.fetchMessages(roomId: roomId),
+      _repository.fetchReadPosition(roomId: roomId),
+    ]);
+    final messages = _sortedUnique(results[0] as List<ChatMessage>);
+    final readPosition = results[1] as MessageCursor?;
+    final userId = ref.read(authControllerProvider).value?.id;
+    final unread =
+        readPosition == null
+            ? const <ChatMessage>[]
+            : messages
+                .where(
+                  (message) =>
+                      message.senderId != userId &&
+                      _isAfter(message, readPosition),
+                )
+                .toList();
     _subscription = await _repository.subscribe(
       roomId: roomId,
-      onMessage: _merge,
+      onMessage: _onRealtimeMessage,
       onConnected: () => unawaited(_catchUp(roomId)),
     );
+    final latest = messages.lastOrNull;
+    if (latest != null) unawaited(_markRead(roomId, latest));
     return ChatState(
       roomId: roomId,
-      messages: _sortedUnique(messages),
+      messages: messages,
       hasMore: messages.length == ChatConstants.pageSize,
+      firstUnreadMessageId: unread.firstOrNull?.id,
+      unreadCount: unread.length,
     );
   }
 
@@ -95,6 +123,7 @@ class ChatController extends AsyncNotifier<ChatState> {
       roomId: current!.roomId!,
       senderId: user.id,
       senderNickname: user.nickname,
+      senderAvatarUrl: user.avatarUrl,
       clientMessageId: clientId,
       body: trimmed,
       createdAt: DateTime.now(),
@@ -139,6 +168,7 @@ class ChatController extends AsyncNotifier<ChatState> {
       roomId: current!.roomId!,
       senderId: user.id,
       senderNickname: user.nickname,
+      senderAvatarUrl: user.avatarUrl,
       clientMessageId: clientId,
       body: '이미지',
       createdAt: DateTime.now(),
@@ -169,6 +199,24 @@ class ChatController extends AsyncNotifier<ChatState> {
     state = AsyncData(
       current.copyWith(messages: _sortedUnique([...current.messages, message])),
     );
+  }
+
+  void _onRealtimeMessage(ChatMessage message) {
+    _merge(message);
+    if (!message.id.startsWith('local:')) {
+      unawaited(_markRead(message.roomId, message));
+    }
+  }
+
+  Future<void> _markRead(String roomId, ChatMessage message) async {
+    try {
+      await _repository.markRead(
+        roomId: roomId,
+        position: MessageCursor.fromMessage(message),
+      );
+    } catch (_) {
+      // Reading messages must still work if persisting the position fails.
+    }
   }
 
   void _replaceStatus(String clientId, MessageSendStatus status) {
@@ -216,5 +264,10 @@ class ChatController extends AsyncNotifier<ChatState> {
       return byTime != 0 ? byTime : a.id.compareTo(b.id);
     });
     return result;
+  }
+
+  bool _isAfter(ChatMessage message, MessageCursor cursor) {
+    final byTime = message.createdAt.compareTo(cursor.createdAt);
+    return byTime > 0 || (byTime == 0 && message.id.compareTo(cursor.id) > 0);
   }
 }

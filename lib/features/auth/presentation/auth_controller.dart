@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/repository_providers.dart';
@@ -22,5 +24,27 @@ class AuthController extends AsyncNotifier<AppUser?> {
   Future<void> signOut() async {
     await ref.read(authRepositoryProvider).signOut();
     state = const AsyncData(null);
+  }
+
+  Future<bool> updateProfile({
+    required String nickname,
+    Uint8List? avatarBytes,
+    String? avatarMimeType,
+    bool deleteAvatar = false,
+  }) async {
+    try {
+      final user = await ref
+          .read(authRepositoryProvider)
+          .updateProfile(
+            nickname: nickname,
+            avatarBytes: avatarBytes,
+            avatarMimeType: avatarMimeType,
+            deleteAvatar: deleteAvatar,
+          );
+      state = AsyncData(user);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }
