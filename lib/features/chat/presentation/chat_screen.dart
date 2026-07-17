@@ -21,11 +21,13 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   static const _maxImageBytes = 10 * 1024 * 1024;
   final _text = TextEditingController();
+  final _composerFocus = FocusNode();
   final _scroll = ScrollController();
   final _imagePicker = ImagePicker();
   final _initialFocusKey = GlobalKey();
   bool _positionedAfterLoad = false;
   String? _latestMessageId;
+  double _previousKeyboardHeight = 0;
 
   @override
   void initState() {
@@ -40,6 +42,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _text.dispose();
+    _composerFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -54,6 +57,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final me = ref.watch(authControllerProvider).value;
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _followKeyboardIfNeeded(keyboardHeight);
     final loadedChat = chat.value;
     if (loadedChat != null && loadedChat.messages.isNotEmpty) {
       _scheduleInitialFocus(hasUnread: loadedChat.firstUnreadMessageId != null);
@@ -112,6 +116,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
             _Composer(
               controller: _text,
+              focusNode: _composerFocus,
               onSend: _send,
               onPickImage: _pickImage,
             ),
@@ -126,7 +131,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (body.isEmpty) return;
     ref.read(chatControllerProvider.notifier).send(body);
     _text.clear();
+    _composerFocus.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _composerFocus.requestFocus();
       if (_scroll.hasClients) {
         _scroll.animateTo(
           _scroll.position.maxScrollExtent,
@@ -137,6 +144,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           curve: Curves.easeOut,
         );
       }
+    });
+  }
+
+  void _followKeyboardIfNeeded(double keyboardHeight) {
+    final keyboardOpened = keyboardHeight > 0 && _previousKeyboardHeight == 0;
+    final wasNearBottom =
+        !_scroll.hasClients ||
+        _scroll.position.maxScrollExtent - _scroll.position.pixels <= 120;
+    _previousKeyboardHeight = keyboardHeight;
+    if (!keyboardOpened || !wasNearBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 200), () {
+        if (!mounted || MediaQuery.viewInsetsOf(context).bottom == 0) return;
+        _scrollToLatest();
+      });
     });
   }
 
@@ -858,10 +880,12 @@ class _ImageError extends StatelessWidget {
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
+    required this.focusNode,
     required this.onSend,
     required this.onPickImage,
   });
   final TextEditingController controller;
+  final FocusNode focusNode;
   final VoidCallback onSend;
   final VoidCallback onPickImage;
 
@@ -882,9 +906,11 @@ class _Composer extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
+              focusNode: focusNode,
               minLines: 1,
               maxLines: 5,
               maxLength: ChatConstants.maxMessageLength,
+              textInputAction: TextInputAction.send,
               decoration: const InputDecoration(
                 hintText: '메시지를 입력하세요',
                 counterText: '',
