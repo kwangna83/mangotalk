@@ -26,6 +26,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _imagePicker = ImagePicker();
   final _initialFocusKey = GlobalKey();
   bool _positionedAfterLoad = false;
+  bool _loadingOlderForScroll = false;
   String? _latestMessageId;
   double _previousKeyboardHeight = 0;
 
@@ -34,9 +35,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     _scroll.addListener(() {
       if (_scroll.hasClients && _scroll.position.pixels < 120) {
-        ref.read(chatControllerProvider.notifier).loadOlder();
+        _loadOlderPreservingPosition();
       }
     });
+  }
+
+  Future<void> _loadOlderPreservingPosition() async {
+    if (_loadingOlderForScroll || !_scroll.hasClients) return;
+    _loadingOlderForScroll = true;
+    final previousPixels = _scroll.position.pixels;
+    final previousMaxScrollExtent = _scroll.position.maxScrollExtent;
+    try {
+      await ref.read(chatControllerProvider.notifier).loadOlder();
+      if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_scroll.hasClients) return;
+      final addedExtent =
+          _scroll.position.maxScrollExtent - previousMaxScrollExtent;
+      if (addedExtent <= 0) return;
+      _scroll.jumpTo(
+        (previousPixels + addedExtent).clamp(
+          _scroll.position.minScrollExtent,
+          _scroll.position.maxScrollExtent,
+        ),
+      );
+    } catch (_) {
+      // The controller keeps existing messages when loading older fails.
+    } finally {
+      _loadingOlderForScroll = false;
+    }
   }
 
   @override
