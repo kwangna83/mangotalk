@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import '../domain/notification_repository.dart';
 
@@ -35,7 +36,10 @@ class FirebaseNotificationRepository implements NotificationRepository {
   @override
   Future<String?> token() async {
     if (!isSupported) return null;
-    return _messaging.getToken(vapidKey: vapidKey);
+    return _messaging.getToken(
+      vapidKey: vapidKey,
+      serviceWorkerScriptPath: kIsWeb ? 'firebase-messaging-sw.js' : null,
+    );
   }
 
   @override
