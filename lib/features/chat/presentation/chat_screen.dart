@@ -524,7 +524,9 @@ class _NotificationDialog extends ConsumerWidget {
     if (error is PostgrestException) {
       return 'Supabase 오류: ${error.code ?? 'unknown'}\n${error.message}';
     }
-    return '오류 유형: ${error.runtimeType}';
+    final message = error.toString();
+    return '브라우저 오류: '
+        '${message.isEmpty ? error.runtimeType : message}';
   }
 }
 
