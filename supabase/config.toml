@@ -19,3 +19,6 @@ enable_anonymous_sign_ins = true
 
 [realtime]
 enabled = true
+
+[functions.send-message-push]
+verify_jwt = false

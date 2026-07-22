@@ -43,6 +43,13 @@ jobs:
           --base-href /mangotalk/
           --dart-define=SUPABASE_URL=https://qmzpyoulawdlecmtjkib.supabase.co
           --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_l6Dx4gy4f2aNPD0Kx5e1nA_KvRoqxtb
+          --dart-define=FIREBASE_WEB_API_KEY=AIzaSyAq_OejXpUSBpIaAO03e5ymirSl2NRpVjw
+          --dart-define=FIREBASE_WEB_AUTH_DOMAIN=mangotalk-notifications.firebaseapp.com
+          --dart-define=FIREBASE_PROJECT_ID=mangotalk-notifications
+          --dart-define=FIREBASE_STORAGE_BUCKET=mangotalk-notifications.firebasestorage.app
+          --dart-define=FIREBASE_MESSAGING_SENDER_ID=682588856465
+          --dart-define=FIREBASE_WEB_APP_ID=1:682588856465:web:e9623f8ec0fd5a78551f30
+          --dart-define=FIREBASE_WEB_VAPID_KEY=BNilJmIPClV55BUtvDEyaaI3rpl__AZ3_XrIrYSJadWnrpatO3t1qQJJXHtK75AgACPDa7P7Zm__qzgG2ViRPtc
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

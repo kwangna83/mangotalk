@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/repository_providers.dart';
 import '../domain/app_user.dart';
+import '../../notifications/presentation/notification_controller.dart';
 
 final authControllerProvider = AsyncNotifierProvider<AuthController, AppUser?>(
   AuthController.new,
@@ -22,6 +23,9 @@ class AuthController extends AsyncNotifier<AppUser?> {
   }
 
   Future<void> signOut() async {
+    await ref
+        .read(notificationControllerProvider.notifier)
+        .disableCurrentSubscription();
     await ref.read(authRepositoryProvider).signOut();
     state = const AsyncData(null);
   }

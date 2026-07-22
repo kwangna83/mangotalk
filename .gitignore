@@ -52,6 +52,10 @@ app.*.map.json
 *.secrets
 supabase/.temp/
 
+# Firebase Admin SDK service-account credentials
+firebase/*adminsdk*.json
+firebase/*service-account*.json
+
 # Apple signing and App Store Connect credentials
 *.p12
 *.mobileprovision

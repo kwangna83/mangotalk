@@ -9,6 +9,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/validation/input_validators.dart';
 import '../../auth/domain/app_user.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../notifications/domain/notification_repository.dart';
+import '../../notifications/presentation/notification_controller.dart';
 import '../domain/chat_message.dart';
 import 'chat_controller.dart';
 
@@ -101,6 +103,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _Header(
               user: me,
               onRefresh: () => ref.invalidate(chatControllerProvider),
+              onNotifications: _showNotificationSettings,
               onEditProfile: me == null ? null : () => _editProfile(me),
               onSignOut:
                   () => ref.read(authControllerProvider.notifier).signOut(),
@@ -327,17 +330,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     if (changed == true) ref.invalidate(chatControllerProvider);
   }
+
+  Future<void> _showNotificationSettings() => showDialog<void>(
+    context: context,
+    builder: (_) => const _NotificationDialog(),
+  );
 }
 
 class _Header extends StatelessWidget {
   const _Header({
     required this.user,
     required this.onRefresh,
+    required this.onNotifications,
     required this.onEditProfile,
     required this.onSignOut,
   });
   final AppUser? user;
   final VoidCallback onRefresh;
+  final VoidCallback onNotifications;
   final VoidCallback? onEditProfile;
   final VoidCallback onSignOut;
 
@@ -387,6 +397,11 @@ class _Header extends StatelessWidget {
           icon: const Icon(Icons.manage_accounts_rounded),
         ),
         IconButton(
+          tooltip: '알림 설정',
+          onPressed: onNotifications,
+          icon: const Icon(Icons.notifications_rounded),
+        ),
+        IconButton(
           tooltip: '채팅 새로고침',
           onPressed: onRefresh,
           icon: const Icon(Icons.refresh_rounded),
@@ -399,6 +414,90 @@ class _Header extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _NotificationDialog extends ConsumerWidget {
+  const _NotificationDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final permission = ref.watch(notificationControllerProvider);
+    return AlertDialog(
+      title: const Text('새 메시지 알림'),
+      content: permission.when(
+        loading:
+            () => const SizedBox(
+              height: 48,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        error:
+            (_, _) =>
+                const Text('알림 설정을 변경하지 못했습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.'),
+        data:
+            (status) => Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(_icon(status), color: _color(context, status)),
+                const SizedBox(width: 12),
+                Flexible(child: Text(_description(status))),
+              ],
+            ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('닫기'),
+        ),
+        if (permission.value == PushPermissionStatus.authorized)
+          OutlinedButton.icon(
+            onPressed:
+                permission.isLoading
+                    ? null
+                    : () =>
+                        ref
+                            .read(notificationControllerProvider.notifier)
+                            .disableCurrentSubscription(),
+            icon: const Icon(Icons.notifications_off_outlined),
+            label: const Text('이 브라우저에서 끄기'),
+          ),
+        if (permission.value != PushPermissionStatus.authorized &&
+            permission.value != PushPermissionStatus.unsupported)
+          FilledButton.icon(
+            onPressed:
+                permission.isLoading
+                    ? null
+                    : () =>
+                        ref
+                            .read(notificationControllerProvider.notifier)
+                            .enable(),
+            icon: const Icon(Icons.notifications_active_rounded),
+            label: const Text('알림 허용'),
+          ),
+      ],
+    );
+  }
+
+  String _description(PushPermissionStatus status) => switch (status) {
+    PushPermissionStatus.authorized => '이 브라우저에서 새 메시지 알림을 받고 있습니다.',
+    PushPermissionStatus.denied => '알림이 차단되어 있습니다. 브라우저 사이트 설정에서 알림을 허용해 주세요.',
+    PushPermissionStatus.disabled => '이 브라우저의 알림을 껐습니다. 다시 켜면 새 FCM 토큰을 등록합니다.',
+    PushPermissionStatus.notDetermined =>
+      '알림을 허용하면 앱을 보고 있지 않을 때도 새 메시지를 알려드려요.',
+    PushPermissionStatus.unsupported => '현재 환경에서는 푸시 알림을 지원하지 않습니다.',
+  };
+
+  IconData _icon(PushPermissionStatus status) => switch (status) {
+    PushPermissionStatus.authorized => Icons.notifications_active_rounded,
+    PushPermissionStatus.denied ||
+    PushPermissionStatus.disabled => Icons.notifications_off_outlined,
+    PushPermissionStatus.notDetermined => Icons.notifications_none_rounded,
+    PushPermissionStatus.unsupported => Icons.info_outline_rounded,
+  };
+
+  Color _color(BuildContext context, PushPermissionStatus status) =>
+      status == PushPermissionStatus.authorized
+          ? Theme.of(context).colorScheme.primary
+          : Theme.of(context).colorScheme.onSurfaceVariant;
 }
 
 class _Avatar extends StatelessWidget {
