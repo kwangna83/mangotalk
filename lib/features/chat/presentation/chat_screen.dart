@@ -492,7 +492,9 @@ class _NotificationDialog extends ConsumerWidget {
     PushPermissionStatus.disabled => '이 브라우저의 알림을 껐습니다. 다시 켜면 새 FCM 토큰을 등록합니다.',
     PushPermissionStatus.notDetermined =>
       '알림을 허용하면 앱을 보고 있지 않을 때도 새 메시지를 알려드려요.',
-    PushPermissionStatus.unsupported => '현재 환경에서는 푸시 알림을 지원하지 않습니다.',
+    PushPermissionStatus.unsupported =>
+      '현재 브라우저에서는 푸시 알림을 지원하지 않습니다. '
+          'iPhone과 iPad에서는 Safari 공유 메뉴의 “홈 화면에 추가”로 설치한 MangoTalk에서 알림을 켜 주세요.',
   };
 
   IconData _icon(PushPermissionStatus status) => switch (status) {
@@ -509,6 +511,9 @@ class _NotificationDialog extends ConsumerWidget {
           : Theme.of(context).colorScheme.onSurfaceVariant;
 
   String _errorDescription(Object error) {
+    if (error is NotificationSetupException) {
+      return error.toString();
+    }
     if (error is FirebaseException) {
       return 'Firebase 오류: ${error.code}'
           "${error.message == null ? '' : '\n${error.message}'}";

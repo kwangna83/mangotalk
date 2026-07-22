@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import '../domain/notification_repository.dart';
+import 'push_context_support.dart';
 
 class FirebaseNotificationRepository implements NotificationRepository {
   FirebaseNotificationRepository({required this.vapidKey});
@@ -12,7 +13,7 @@ class FirebaseNotificationRepository implements NotificationRepository {
   FirebaseMessaging get _messaging => FirebaseMessaging.instance;
 
   @override
-  bool get isSupported => Firebase.apps.isNotEmpty;
+  bool get isSupported => Firebase.apps.isNotEmpty && isPushContextSupported;
 
   @override
   Future<PushPermissionStatus> permissionStatus() async {

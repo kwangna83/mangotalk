@@ -10,6 +10,16 @@ final notificationControllerProvider =
       NotificationController.new,
     );
 
+class NotificationSetupException implements Exception {
+  const NotificationSetupException(this.stage, this.cause);
+
+  final String stage;
+  final Object cause;
+
+  @override
+  String toString() => '$stage 실패: $cause';
+}
+
 class NotificationController extends AsyncNotifier<PushPermissionStatus> {
   StreamSubscription<String>? _tokenSubscription;
 
@@ -32,11 +42,20 @@ class NotificationController extends AsyncNotifier<PushPermissionStatus> {
     final repository = ref.read(notificationRepositoryProvider);
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final status = await repository.requestPermission();
+      final PushPermissionStatus status;
+      try {
+        status = await repository.requestPermission();
+      } catch (error) {
+        throw NotificationSetupException('알림 권한 요청', error);
+      }
       if (status == PushPermissionStatus.authorized) {
-        await ref
-            .read(installationIdStoreProvider)
-            .setNotificationsEnabled(true);
+        try {
+          await ref
+              .read(installationIdStoreProvider)
+              .setNotificationsEnabled(true);
+        } catch (error) {
+          throw NotificationSetupException('알림 설정 저장', error);
+        }
         await _syncToken();
         _listenForTokenRefresh();
       }
@@ -79,24 +98,38 @@ class NotificationController extends AsyncNotifier<PushPermissionStatus> {
   }
 
   Future<void> _syncToken() async {
-    final token = await ref.read(notificationRepositoryProvider).token();
+    final String? token;
+    try {
+      token = await ref.read(notificationRepositoryProvider).token();
+    } catch (error) {
+      throw NotificationSetupException('FCM 토큰 발급', error);
+    }
     if (token != null && token.isNotEmpty) await _registerToken(token);
   }
 
   Future<void> _registerToken(String token) async {
     final userId = ref.read(supabaseClientProvider).auth.currentUser?.id;
     if (userId == null) return;
-    final installationId =
-        await ref.read(installationIdStoreProvider).getOrCreate();
+    final String installationId;
+    try {
+      installationId =
+          await ref.read(installationIdStoreProvider).getOrCreate();
+    } catch (error) {
+      throw NotificationSetupException('설치 ID 생성', error);
+    }
     final now = DateTime.now().toUtc().toIso8601String();
-    await ref.read(supabaseClientProvider).from('push_subscriptions').upsert({
-      'user_id': userId,
-      'installation_id': installationId,
-      'platform': 'web',
-      'token': token,
-      'enabled': true,
-      'last_seen_at': now,
-      'updated_at': now,
-    }, onConflict: 'user_id,installation_id');
+    try {
+      await ref.read(supabaseClientProvider).from('push_subscriptions').upsert({
+        'user_id': userId,
+        'installation_id': installationId,
+        'platform': 'web',
+        'token': token,
+        'enabled': true,
+        'last_seen_at': now,
+        'updated_at': now,
+      }, onConflict: 'user_id,installation_id');
+    } catch (error) {
+      throw NotificationSetupException('Supabase 구독 저장', error);
+    }
   }
 }
