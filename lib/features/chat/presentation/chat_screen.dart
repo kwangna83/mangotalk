@@ -698,12 +698,21 @@ class _MessageBubble extends StatelessWidget {
   final bool isMine;
   final VoidCallback onRetry;
 
+  String get _sentAtLabel {
+    final sentAt = message.createdAt.toLocal();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '${sentAt.year.toString().padLeft(4, '0')}-'
+        '${twoDigits(sentAt.month)}-${twoDigits(sentAt.day)} '
+        '${twoDigits(sentAt.hour)}:${twoDigits(sentAt.minute)}';
+  }
+
   @override
   Widget build(BuildContext context) => Semantics(
     label:
         message.type == ChatMessageType.image
-            ? '${message.senderNickname}의 이미지 메시지'
-            : '${message.senderNickname}의 메시지: ${message.body}',
+            ? '${message.senderNickname}의 이미지 메시지, 전송시간 $_sentAtLabel'
+            : '${message.senderNickname}의 메시지: ${message.body}, '
+                '전송시간 $_sentAtLabel',
     child: Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
@@ -751,6 +760,15 @@ class _MessageBubble extends StatelessWidget {
                                 color: isMine ? Colors.white : AppColors.ink,
                               ),
                             ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 6, right: 6),
+                    child: Text(
+                      _sentAtLabel,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.ink.withValues(alpha: .62),
+                      ),
+                    ),
                   ),
                   if (message.status != MessageSendStatus.sent)
                     TextButton.icon(
