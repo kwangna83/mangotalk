@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../../core/constants/chat_constants.dart';
 import '../../../core/theme/app_theme.dart';
@@ -434,8 +436,20 @@ class _NotificationDialog extends ConsumerWidget {
               child: Center(child: CircularProgressIndicator()),
             ),
         error:
-            (_, _) =>
-                const Text('알림 설정을 변경하지 못했습니다. 네트워크 연결을 확인하고 다시 시도해 주세요.'),
+            (error, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('알림 설정을 변경하지 못했습니다.'),
+                const SizedBox(height: 8),
+                SelectableText(
+                  _errorDescription(error),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ),
         data:
             (status) => Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -501,6 +515,17 @@ class _NotificationDialog extends ConsumerWidget {
       status == PushPermissionStatus.authorized
           ? Theme.of(context).colorScheme.primary
           : Theme.of(context).colorScheme.onSurfaceVariant;
+
+  String _errorDescription(Object error) {
+    if (error is FirebaseException) {
+      return 'Firebase 오류: ${error.code}'
+          "${error.message == null ? '' : '\n${error.message}'}";
+    }
+    if (error is PostgrestException) {
+      return 'Supabase 오류: ${error.code ?? 'unknown'}\n${error.message}';
+    }
+    return '오류 유형: ${error.runtimeType}';
+  }
 }
 
 class _Avatar extends StatelessWidget {
