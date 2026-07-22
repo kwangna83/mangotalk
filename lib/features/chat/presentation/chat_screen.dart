@@ -105,7 +105,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           children: [
             _Header(
               user: me,
-              onRefresh: () => ref.invalidate(chatControllerProvider),
               onNotifications: _showNotificationSettings,
               onEditProfile: me == null ? null : () => _editProfile(me),
               onSignOut:
@@ -345,13 +344,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 class _Header extends StatelessWidget {
   const _Header({
     required this.user,
-    required this.onRefresh,
     required this.onNotifications,
     required this.onEditProfile,
     required this.onSignOut,
   });
   final AppUser? user;
-  final VoidCallback onRefresh;
   final VoidCallback onNotifications;
   final VoidCallback? onEditProfile;
   final VoidCallback onSignOut;
@@ -405,11 +402,6 @@ class _Header extends StatelessWidget {
           tooltip: '알림 설정',
           onPressed: onNotifications,
           icon: const Icon(Icons.notifications_rounded),
-        ),
-        IconButton(
-          tooltip: '채팅 새로고침',
-          onPressed: onRefresh,
-          icon: const Icon(Icons.refresh_rounded),
         ),
         IconButton(
           tooltip: '로그아웃',
