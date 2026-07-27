@@ -16,6 +16,7 @@ import '../../notifications/domain/notification_repository.dart';
 import '../../notifications/presentation/notification_controller.dart';
 import '../domain/chat_message.dart';
 import 'chat_controller.dart';
+import 'chat_scroll_target.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -146,7 +147,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   : ListView(
                                     controller: _scroll,
                                     scrollCacheExtent:
-                                        const ScrollCacheExtent.pixels(0),
+                                        const ScrollCacheExtent.pixels(1200),
                                     keyboardDismissBehavior:
                                         ScrollViewKeyboardDismissBehavior
                                             .onDrag,
@@ -330,23 +331,74 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _scrollToMessage(String messageId) async {
-    var target = _messageKeys[messageId]?.currentContext;
-    while (target == null) {
-      final current = ref.read(chatControllerProvider).value;
-      if (current == null || !current.hasMore) break;
+    var current = ref.read(chatControllerProvider).value;
+    var targetIndex =
+        current?.messages.indexWhere((message) => message.id == messageId) ??
+        -1;
+    while (targetIndex < 0 && current?.hasMore == true) {
       await ref.read(chatControllerProvider.notifier).loadOlder();
       if (!mounted) return;
       await WidgetsBinding.instance.endOfFrame;
-      target = _messageKeys[messageId]?.currentContext;
+      current = ref.read(chatControllerProvider).value;
+      targetIndex =
+          current?.messages.indexWhere((message) => message.id == messageId) ??
+          -1;
     }
     if (!mounted) return;
-    if (target == null) {
+    if (current == null || targetIndex < 0) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('원본 메시지를 찾을 수 없어요.')));
       return;
     }
-    if (!target.mounted) return;
+    if (!_scroll.hasClients) return;
+    var target = _messageKeys[messageId]?.currentContext;
+    if (target == null) {
+      _scroll.jumpTo(
+        estimateMessageScrollOffset(
+          targetIndex: targetIndex,
+          itemCount: current.messages.length,
+          maxScrollExtent: _scroll.position.maxScrollExtent,
+        ).clamp(
+          _scroll.position.minScrollExtent,
+          _scroll.position.maxScrollExtent,
+        ),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_scroll.hasClients) return;
+      target = _messageKeys[messageId]?.currentContext;
+    }
+    for (var attempt = 0; target == null && attempt < 100; attempt++) {
+      final visibleIndices = <int>[];
+      for (var index = 0; index < current.messages.length; index++) {
+        if (_messageKeys[current.messages[index].id]?.currentContext != null) {
+          visibleIndices.add(index);
+        }
+      }
+      final direction = directionToMessage(
+        targetIndex: targetIndex,
+        visibleIndices: visibleIndices,
+      );
+      if (direction == 0) break;
+      final nextOffset =
+          _scroll.position.pixels +
+          direction * _scroll.position.viewportDimension * .75;
+      _scroll.jumpTo(
+        nextOffset.clamp(
+          _scroll.position.minScrollExtent,
+          _scroll.position.maxScrollExtent,
+        ),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_scroll.hasClients) return;
+      target = _messageKeys[messageId]?.currentContext;
+    }
+    if (target == null || !target.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('원본 위치로 이동하지 못했어요.')));
+      return;
+    }
     await Scrollable.ensureVisible(
       target,
       alignment: .18,
@@ -1132,6 +1184,9 @@ class _MessageImage extends StatelessWidget {
       return Image.network(
         imageUrl,
         fit: fit,
+        cacheWidth: 1040,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.medium,
         loadingBuilder:
             (context, child, progress) =>
                 progress == null
