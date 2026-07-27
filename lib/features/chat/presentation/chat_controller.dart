@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/chat_constants.dart';
+import '../../../core/platform/app_badge.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/chat_message.dart';
@@ -112,7 +113,11 @@ class ChatController extends AsyncNotifier<ChatState> {
     }
   }
 
-  Future<void> send(String body, {String? clientMessageId}) async {
+  Future<void> send(
+    String body, {
+    String? clientMessageId,
+    ChatMessage? replyTo,
+  }) async {
     final current = state.value;
     final user = ref.read(authControllerProvider).value;
     final trimmed = body.trim();
@@ -128,6 +133,17 @@ class ChatController extends AsyncNotifier<ChatState> {
       body: trimmed,
       createdAt: DateTime.now(),
       status: MessageSendStatus.sending,
+      replyToMessageId: replyTo?.id,
+      replySenderNickname: replyTo?.senderNickname,
+      replyBody:
+          replyTo == null
+              ? null
+              : replyTo.type == ChatMessageType.image
+              ? '사진'
+              : replyTo.body.length <= 160
+              ? replyTo.body
+              : replyTo.body.substring(0, 160),
+      replyMessageType: replyTo?.type,
     );
     _merge(optimistic);
     try {
@@ -136,6 +152,7 @@ class ChatController extends AsyncNotifier<ChatState> {
           roomId: current.roomId!,
           clientMessageId: clientId,
           body: trimmed,
+          replyToMessageId: replyTo?.id,
         ),
       );
     } catch (_) {
@@ -151,7 +168,23 @@ class ChatController extends AsyncNotifier<ChatState> {
             mimeType: message.imageMimeType!,
             clientMessageId: message.clientMessageId,
           )
-          : send(message.body, clientMessageId: message.clientMessageId);
+          : send(
+            message.body,
+            clientMessageId: message.clientMessageId,
+            replyTo:
+                message.isReply
+                    ? ChatMessage(
+                      id: message.replyToMessageId ?? '',
+                      roomId: message.roomId,
+                      senderId: '',
+                      senderNickname: message.replySenderNickname!,
+                      clientMessageId: '',
+                      body: message.replyBody!,
+                      createdAt: message.createdAt,
+                      type: message.replyMessageType ?? ChatMessageType.text,
+                    )
+                    : null,
+          );
 
   Future<void> sendImage({
     required Uint8List bytes,
@@ -214,6 +247,7 @@ class ChatController extends AsyncNotifier<ChatState> {
         roomId: roomId,
         position: MessageCursor.fromMessage(message),
       );
+      await clearAppBadge();
     } catch (_) {
       // Reading messages must still work if persisting the position fails.
     }

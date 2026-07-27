@@ -54,3 +54,10 @@
 - [ ] 7.2 macOS/Xcode에서 iOS Push Notifications capability와 Background Modes를 활성화한다
 - [ ] 7.3 Apple Developer에서 APNs key를 만들고 Firebase에 등록한 뒤 iOS 실제 기기에서 검증한다
 - [ ] 7.4 Android·iOS 설정 파일과 APNs private key가 Git 비밀값 정책을 준수하는지 검사한다
+
+## 8. 웹앱 아이콘 안 읽음 배지
+
+- [x] 8.1 Edge Function에서 수신자별 안 읽은 메시지 수를 계산해 FCM data payload에 포함한다
+- [x] 8.2 service worker에서 Badging API 지원 시 앱 아이콘 배지를 설정한다
+- [x] 8.3 채팅 읽음 처리·로그아웃·알림 비활성화 시 앱 아이콘 배지를 제거한다
+- [x] 8.4 Badging API 미지원 환경에서 기존 알림 동작을 유지하는 fallback을 구현한다

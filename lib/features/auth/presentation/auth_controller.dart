@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/repository_providers.dart';
+import '../../../core/platform/app_badge.dart';
 import '../domain/app_user.dart';
 import '../../notifications/presentation/notification_controller.dart';
 
@@ -27,6 +28,7 @@ class AuthController extends AsyncNotifier<AppUser?> {
         .read(notificationControllerProvider.notifier)
         .disableCurrentSubscription();
     await ref.read(authRepositoryProvider).signOut();
+    await clearAppBadge();
     state = const AsyncData(null);
   }
 

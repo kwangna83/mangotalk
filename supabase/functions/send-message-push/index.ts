@@ -72,7 +72,7 @@ Deno.serve(async (request) => {
 
   const { data: subscriptions, error: subscriptionsError } = await supabase
     .from('push_subscriptions')
-    .select('id, token')
+    .select('id, token, user_id')
     .in('user_id', recipientIds)
     .eq('enabled', true)
   if (subscriptionsError) throw subscriptionsError
@@ -86,6 +86,26 @@ Deno.serve(async (request) => {
   const appUrl = Deno.env.get('APP_PUBLIC_URL') ?? 'https://kwangna83.github.io/mangotalk/'
   let sent = 0
   let skipped = 0
+  const unreadCounts = new Map<string, number>()
+
+  for (const recipientId of recipientIds) {
+    const { data: position } = await supabase
+      .from('message_read_positions')
+      .select('last_read_created_at')
+      .eq('room_id', message.room_id)
+      .eq('user_id', recipientId)
+      .maybeSingle()
+    let countQuery = supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('room_id', message.room_id)
+      .neq('sender_id', recipientId)
+    if (position?.last_read_created_at) {
+      countQuery = countQuery.gt('created_at', position.last_read_created_at)
+    }
+    const { count } = await countQuery
+    unreadCounts.set(recipientId, count ?? 0)
+  }
 
   for (const subscription of subscriptions) {
     const { error: claimError } = await supabase.from('push_deliveries').insert({
@@ -115,6 +135,7 @@ Deno.serve(async (request) => {
               body: preview,
               roomId: message.room_id,
               messageId: message.id,
+              unreadCount: String(unreadCounts.get(subscription.user_id) ?? 0),
             },
             webpush: {
               fcm_options: {

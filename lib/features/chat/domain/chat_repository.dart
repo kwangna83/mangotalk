@@ -34,6 +34,7 @@ abstract interface class ChatRepository {
     required String roomId,
     required String clientMessageId,
     required String body,
+    String? replyToMessageId,
   });
 
   Future<ChatMessage> sendImage({

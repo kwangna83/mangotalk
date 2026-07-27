@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/repository_providers.dart';
+import '../../../core/platform/app_badge.dart';
 import '../domain/notification_repository.dart';
 
 final notificationControllerProvider =
@@ -85,6 +86,7 @@ class NotificationController extends AsyncNotifier<PushPermissionStatus> {
             .eq('installation_id', installationId);
       }
       await ref.read(notificationRepositoryProvider).deleteToken();
+      await clearAppBadge();
       return PushPermissionStatus.disabled;
     });
   }

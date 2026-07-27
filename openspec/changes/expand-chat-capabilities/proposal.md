@@ -12,6 +12,8 @@
 - 이미지 메타데이터, 방 생성 함수, 관련 인덱스와 DB/Storage RLS 정책을 migration으로 추가한다.
 - 기존 공용방, 텍스트 메시지 및 익명 사용자 세션은 그대로 유지한다.
 - 사용자가 프로필 사진을 등록·교체·삭제하고 채팅 아바타에서 크게 볼 수 있게 한다.
+- 사용자가 특정 텍스트·이미지 메시지에 답장하고 인용 영역에서 원문 위치로 이동할 수 있게 한다.
+- 사용자가 이전 대화를 탐색할 때 최신 메시지로 돌아가는 플로팅 버튼을 제공한다.
 
 ## Capabilities
 
@@ -21,6 +23,8 @@
 - `image-messaging`: 이미지 선택, 검증, 비공개 업로드, 메시지 연결, 표시와 오류 복구를 정의한다. GitHub #1.
 - `profile-images`: 프로필 사진 등록·교체·삭제, 채팅 아바타 표시와 전체 화면 확대를 정의한다. GitHub #4.
 - `unread-messages`: 사용자·채팅방별 마지막 읽음 위치와 새 메시지 구분 표시를 정의한다.
+- `message-replies`: 특정 메시지 답장, 인용 표시와 원문 이동을 정의한다.
+- `latest-message-navigation`: 이전 대화 탐색 중 최신 메시지로 돌아가는 동작을 정의한다.
 
 ### Modified Capabilities
 
@@ -33,6 +37,8 @@
 - Supabase PostgreSQL에 이미지 첨부 테이블, 방 생성용 RPC와 RLS 정책이 추가된다.
 - Supabase Storage에 비공개 이미지 버킷과 참여자 기반 접근 정책이 추가된다.
 - 프로필 이미지용 공개 읽기 Storage 버킷과 사용자별 쓰기 정책이 추가되고 `profiles`에 이미지 경로가 저장된다.
+- `messages`에 답장 대상과 서버가 확정한 인용 스냅샷이 추가되고 메시지 조회 RPC가 이를 반환한다.
+- 채팅 화면에 답장 선택·취소 UI, 인용 말풍선과 최신 메시지 이동 버튼이 추가된다.
 - 이미지 Storage 용량과 egress가 증가하므로 파일 크기 제한 및 사용량 모니터링이 필요하다.
 - 관련 이슈: https://github.com/kwangna83/mangotalk/issues/1, https://github.com/kwangna83/mangotalk/issues/2, https://github.com/kwangna83/mangotalk/issues/4
 

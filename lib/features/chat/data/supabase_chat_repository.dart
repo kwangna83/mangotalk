@@ -100,6 +100,7 @@ class SupabaseChatRepository implements ChatRepository {
     required String roomId,
     required String clientMessageId,
     required String body,
+    String? replyToMessageId,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('로그인이 필요합니다.');
@@ -111,6 +112,7 @@ class SupabaseChatRepository implements ChatRepository {
               'sender_id': user.id,
               'client_message_id': clientMessageId,
               'body': body.trim(),
+              'reply_to_message_id': replyToMessageId,
             }, onConflict: 'sender_id,client_message_id')
             .select(
               '*, profiles!messages_sender_id_fkey(nickname, avatar_path)',

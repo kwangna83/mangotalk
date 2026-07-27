@@ -34,6 +34,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _loadingOlderForScroll = false;
   String? _latestMessageId;
   double _previousKeyboardHeight = 0;
+  bool _showLatestButton = false;
+  ChatMessage? _replyTo;
+  final Map<String, GlobalKey> _messageKeys = {};
 
   @override
   void initState() {
@@ -42,7 +45,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (_scroll.hasClients && _scroll.position.pixels < 120) {
         _loadOlderPreservingPosition();
       }
+      _updateLatestButton();
     });
+  }
+
+  void _updateLatestButton() {
+    if (!_scroll.hasClients) return;
+    final show =
+        _scroll.position.maxScrollExtent - _scroll.position.pixels > 120;
+    if (show != _showLatestButton && mounted) {
+      setState(() => _showLatestButton = show);
+    }
   }
 
   Future<void> _loadOlderPreservingPosition() async {
@@ -111,41 +124,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   () => ref.read(authControllerProvider.notifier).signOut(),
             ),
             Expanded(
-              child: chat.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error:
-                    (_, _) => Center(
-                      child: FilledButton(
-                        onPressed: () => ref.invalidate(chatControllerProvider),
-                        child: const Text('다시 연결하기'),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: chat.when(
+                      loading:
+                          () =>
+                              const Center(child: CircularProgressIndicator()),
+                      error:
+                          (_, _) => Center(
+                            child: FilledButton(
+                              onPressed:
+                                  () => ref.invalidate(chatControllerProvider),
+                              child: const Text('다시 연결하기'),
+                            ),
+                          ),
+                      data:
+                          (value) =>
+                              value.messages.isEmpty
+                                  ? const _EmptyChat()
+                                  : ListView(
+                                    controller: _scroll,
+                                    scrollCacheExtent:
+                                        const ScrollCacheExtent.pixels(0),
+                                    keyboardDismissBehavior:
+                                        ScrollViewKeyboardDismissBehavior
+                                            .onDrag,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      20,
+                                      16,
+                                      12,
+                                    ),
+                                    children: [
+                                      for (final message in value.messages)
+                                        _messageItem(
+                                          message: message,
+                                          value: value,
+                                          myUserId: me?.id,
+                                        ),
+                                    ],
+                                  ),
+                    ),
+                  ),
+                  if (_showLatestButton)
+                    Positioned(
+                      right: 16,
+                      bottom: 12,
+                      child: FloatingActionButton.small(
+                        heroTag: 'latest-message',
+                        tooltip: '맨 아래로 이동',
+                        onPressed: _scrollToLatest,
+                        child: const Icon(Icons.keyboard_arrow_down_rounded),
                       ),
                     ),
-                data:
-                    (value) =>
-                        value.messages.isEmpty
-                            ? const _EmptyChat()
-                            : ListView(
-                              controller: _scroll,
-                              scrollCacheExtent: const ScrollCacheExtent.pixels(
-                                0,
-                              ),
-                              keyboardDismissBehavior:
-                                  ScrollViewKeyboardDismissBehavior.onDrag,
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                20,
-                                16,
-                                12,
-                              ),
-                              children: [
-                                for (final message in value.messages)
-                                  _messageItem(
-                                    message: message,
-                                    value: value,
-                                    myUserId: me?.id,
-                                  ),
-                              ],
-                            ),
+                ],
               ),
             ),
             _Composer(
@@ -153,6 +186,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               focusNode: _composerFocus,
               onSend: _send,
               onPickImage: _pickImage,
+              replyTo: _replyTo,
+              onCancelReply: () => setState(() => _replyTo = null),
             ),
           ],
         ),
@@ -163,8 +198,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _send() {
     final body = _text.text.trim();
     if (body.isEmpty) return;
-    ref.read(chatControllerProvider.notifier).send(body);
+    ref.read(chatControllerProvider.notifier).send(body, replyTo: _replyTo);
     _text.clear();
+    setState(() => _replyTo = null);
     _composerFocus.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _composerFocus.requestFocus();
@@ -206,19 +242,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     final focusMessageId = value.firstUnreadMessageId ?? value.messages.last.id;
     final isInitialFocus = message.id == focusMessageId;
+    final messageKey = _messageKeys.putIfAbsent(message.id, GlobalKey.new);
     return KeyedSubtree(
-      key: isInitialFocus ? _initialFocusKey : null,
-      child: Column(
-        children: [
-          if (message.id == value.firstUnreadMessageId)
-            _UnreadDivider(count: value.unreadCount),
-          _MessageBubble(
-            message: message,
-            isMine: message.senderId == myUserId,
-            onRetry:
-                () => ref.read(chatControllerProvider.notifier).retry(message),
-          ),
-        ],
+      key: messageKey,
+      child: KeyedSubtree(
+        key: isInitialFocus ? _initialFocusKey : null,
+        child: Column(
+          children: [
+            if (message.id == value.firstUnreadMessageId)
+              _UnreadDivider(count: value.unreadCount),
+            _MessageBubble(
+              message: message,
+              isMine: message.senderId == myUserId,
+              onRetry:
+                  () =>
+                      ref.read(chatControllerProvider.notifier).retry(message),
+              onReply:
+                  message.id.startsWith('local:')
+                      ? () {}
+                      : () {
+                        setState(() => _replyTo = message);
+                        _composerFocus.requestFocus();
+                      },
+              onOpenReply:
+                  message.replyToMessageId == null
+                      ? null
+                      : () => _scrollToMessage(message.replyToMessageId!),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -273,6 +325,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           MediaQuery.disableAnimationsOf(context)
               ? Duration.zero
               : const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _scrollToMessage(String messageId) async {
+    var target = _messageKeys[messageId]?.currentContext;
+    while (target == null) {
+      final current = ref.read(chatControllerProvider).value;
+      if (current == null || !current.hasMore) break;
+      await ref.read(chatControllerProvider.notifier).loadOlder();
+      if (!mounted) return;
+      await WidgetsBinding.instance.endOfFrame;
+      target = _messageKeys[messageId]?.currentContext;
+    }
+    if (!mounted) return;
+    if (target == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('원본 메시지를 찾을 수 없어요.')));
+      return;
+    }
+    if (!target.mounted) return;
+    await Scrollable.ensureVisible(
+      target,
+      alignment: .18,
+      duration:
+          MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 260),
       curve: Curves.easeOut,
     );
   }
@@ -819,10 +900,14 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.onRetry,
+    required this.onReply,
+    required this.onOpenReply,
   });
   final ChatMessage message;
   final bool isMine;
   final VoidCallback onRetry;
+  final VoidCallback onReply;
+  final VoidCallback? onOpenReply;
 
   String get _sentAtLabel {
     final sentAt = message.createdAt.toLocal();
@@ -839,85 +924,150 @@ class _MessageBubble extends StatelessWidget {
             ? '${message.senderNickname}의 이미지 메시지, 전송시간 $_sentAtLabel'
             : '${message.senderNickname}의 메시지: ${message.body}, '
                 '전송시간 $_sentAtLabel',
-    child: Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!isMine) ...[_messageAvatar(context), const SizedBox(width: 8)],
-            Flexible(
-              child: Column(
-                crossAxisAlignment:
-                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  if (!isMine)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8, bottom: 4),
-                      child: Text(
-                        message.senderNickname,
-                        style: const TextStyle(fontSize: 12),
+    child: GestureDetector(
+      onLongPress: onReply,
+      child: Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isMine) ...[
+                _messageAvatar(context),
+                const SizedBox(width: 8),
+              ],
+              Flexible(
+                child: Column(
+                  crossAxisAlignment:
+                      isMine
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                  children: [
+                    if (!isMine)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8, bottom: 4),
+                        child: Text(
+                          message.senderNickname,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
-                    ),
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 310),
-                    padding:
-                        message.type == ChatMessageType.image
-                            ? const EdgeInsets.all(4)
-                            : const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 11,
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 310),
+                      padding:
+                          message.type == ChatMessageType.image
+                              ? const EdgeInsets.all(4)
+                              : const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 11,
+                              ),
+                      decoration: BoxDecoration(
+                        color: isMine ? AppColors.leaf : Colors.white,
+                        borderRadius: BorderRadius.circular(20).copyWith(
+                          bottomRight: isMine ? const Radius.circular(5) : null,
+                          bottomLeft: isMine ? null : const Radius.circular(5),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (message.isReply) ...[
+                            InkWell(
+                              onTap: onOpenReply,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: (isMine
+                                          ? Colors.white
+                                          : AppColors.purple)
+                                      .withValues(alpha: .18),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      message.replySenderNickname!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color:
+                                            isMine
+                                                ? Colors.white
+                                                : AppColors.purple,
+                                      ),
+                                    ),
+                                    Text(
+                                      message.replyMessageType ==
+                                              ChatMessageType.image
+                                          ? '사진'
+                                          : message.replyBody!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color:
+                                            isMine
+                                                ? Colors.white70
+                                                : AppColors.ink,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                    decoration: BoxDecoration(
-                      color: isMine ? AppColors.leaf : Colors.white,
-                      borderRadius: BorderRadius.circular(20).copyWith(
-                        bottomRight: isMine ? const Radius.circular(5) : null,
-                        bottomLeft: isMine ? null : const Radius.circular(5),
-                      ),
-                    ),
-                    child:
-                        message.type == ChatMessageType.image
-                            ? _MessageImage(message: message)
-                            : Text(
+                            const SizedBox(height: 8),
+                          ],
+                          if (message.type == ChatMessageType.image)
+                            _MessageImage(message: message)
+                          else
+                            Text(
                               message.body,
                               style: TextStyle(
                                 color: isMine ? Colors.white : AppColors.ink,
                               ),
                             ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, left: 6, right: 6),
-                    child: Text(
-                      _sentAtLabel,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppColors.ink.withValues(alpha: .62),
+                        ],
                       ),
                     ),
-                  ),
-                  if (message.status != MessageSendStatus.sent)
-                    TextButton.icon(
-                      onPressed:
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 6, right: 6),
+                      child: Text(
+                        _sentAtLabel,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.ink.withValues(alpha: .62),
+                        ),
+                      ),
+                    ),
+                    if (message.status != MessageSendStatus.sent)
+                      TextButton.icon(
+                        onPressed:
+                            message.status == MessageSendStatus.failed
+                                ? onRetry
+                                : null,
+                        icon: Icon(
                           message.status == MessageSendStatus.failed
-                              ? onRetry
-                              : null,
-                      icon: Icon(
-                        message.status == MessageSendStatus.failed
-                            ? Icons.refresh_rounded
-                            : Icons.schedule_rounded,
+                              ? Icons.refresh_rounded
+                              : Icons.schedule_rounded,
+                        ),
+                        label: Text(
+                          message.status == MessageSendStatus.failed
+                              ? '재시도'
+                              : '전송 중',
+                        ),
                       ),
-                      label: Text(
-                        message.status == MessageSendStatus.failed
-                            ? '재시도'
-                            : '전송 중',
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (isMine) ...[const SizedBox(width: 8), _messageAvatar(context)],
-          ],
+              if (isMine) ...[
+                const SizedBox(width: 8),
+                _messageAvatar(context),
+              ],
+            ],
+          ),
         ),
       ),
     ),
@@ -1054,46 +1204,82 @@ class _Composer extends StatelessWidget {
     required this.focusNode,
     required this.onSend,
     required this.onPickImage,
+    required this.replyTo,
+    required this.onCancelReply,
   });
   final TextEditingController controller;
   final FocusNode focusNode;
   final VoidCallback onSend;
   final VoidCallback onPickImage;
+  final ChatMessage? replyTo;
+  final VoidCallback onCancelReply;
 
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
     child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            tooltip: '이미지 올리기',
-            onPressed: onPickImage,
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              minLines: 1,
-              maxLines: 5,
-              maxLength: ChatConstants.maxMessageLength,
-              textInputAction: TextInputAction.send,
-              decoration: const InputDecoration(
-                hintText: '메시지를 입력하세요',
-                counterText: '',
+          if (replyTo != null)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+              decoration: BoxDecoration(
+                color: AppColors.purple.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              onSubmitted: (_) => onSend(),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${replyTo!.senderNickname}에게 답장 · '
+                      '${replyTo!.type == ChatMessageType.image ? '사진' : replyTo!.body}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '답장 취소',
+                    onPressed: onCancelReply,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            tooltip: '메시지 보내기',
-            onPressed: onSend,
-            icon: const Icon(Icons.arrow_upward_rounded),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              IconButton(
+                tooltip: '이미지 올리기',
+                onPressed: onPickImage,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  minLines: 1,
+                  maxLines: 5,
+                  maxLength: ChatConstants.maxMessageLength,
+                  textInputAction: TextInputAction.send,
+                  decoration: const InputDecoration(
+                    hintText: '메시지를 입력하세요',
+                    counterText: '',
+                  ),
+                  onSubmitted: (_) => onSend(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                tooltip: '메시지 보내기',
+                onPressed: onSend,
+                icon: const Icon(Icons.arrow_upward_rounded),
+              ),
+            ],
           ),
         ],
       ),

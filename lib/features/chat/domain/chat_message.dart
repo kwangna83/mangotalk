@@ -18,6 +18,10 @@ class ChatMessage {
     this.imageUrl,
     this.localImageBytes,
     this.imageMimeType,
+    this.replyToMessageId,
+    this.replySenderNickname,
+    this.replyBody,
+    this.replyMessageType,
     this.status = MessageSendStatus.sent,
   });
 
@@ -33,7 +37,13 @@ class ChatMessage {
   final String? imageUrl;
   final Uint8List? localImageBytes;
   final String? imageMimeType;
+  final String? replyToMessageId;
+  final String? replySenderNickname;
+  final String? replyBody;
+  final ChatMessageType? replyMessageType;
   final MessageSendStatus status;
+
+  bool get isReply => replySenderNickname != null && replyBody != null;
 
   ChatMessage copyWith({
     String? id,
@@ -54,6 +64,10 @@ class ChatMessage {
       imageUrl: imageUrl ?? this.imageUrl,
       localImageBytes: localImageBytes,
       imageMimeType: imageMimeType,
+      replyToMessageId: replyToMessageId,
+      replySenderNickname: replySenderNickname,
+      replyBody: replyBody,
+      replyMessageType: replyMessageType,
       status: status ?? this.status,
     );
   }
@@ -77,6 +91,15 @@ class ChatMessage {
               : ChatMessageType.text,
       imageUrl: json['image_url'] as String?,
       imageMimeType: json['attachment_mime_type'] as String?,
+      replyToMessageId: json['reply_to_message_id'] as String?,
+      replySenderNickname: json['reply_sender_nickname'] as String?,
+      replyBody: json['reply_body'] as String?,
+      replyMessageType:
+          json['reply_message_type'] == null
+              ? null
+              : json['reply_message_type'] == 'image'
+              ? ChatMessageType.image
+              : ChatMessageType.text,
       createdAt:
           DateTime.parse(
             (json['created_at'] ?? json['createdAt']) as String,

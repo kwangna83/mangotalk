@@ -84,3 +84,4 @@ Web service worker는 백그라운드 메시지를 표시하고 `notificationcli
 - 잠금 화면에서 메시지 본문을 기본 표시할지 발신자만 표시할지 향후 사용자 설정으로 제공해야 한다.
 - 공용방 외 다중 채팅방이 활성화될 때 방별 음소거와 알림 빈도 정책을 별도 변경으로 정의해야 한다.
 - iOS 구현 시 APNs 키와 Firebase 프로젝트 연결 및 실제 기기 테스트 일정을 정해야 한다.
+- 웹앱 아이콘 배지는 Edge Function이 수신자별 unread count를 FCM payload에 포함하고 service worker가 Badging API로 설정한다. 메시지를 읽거나 로그아웃·알림 비활성화하면 배지를 제거한다. iOS/iPadOS는 홈 화면 웹앱, 데스크톱은 지원되는 설치형 PWA에서만 적용하고 미지원 환경은 기존 알림 동작을 유지한다.

@@ -13,14 +13,29 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((message) => {
-  if (message.notification) return;
   const data = message.data || {};
+  const unreadCount = Number.parseInt(data.unreadCount || '0', 10);
+  if ('setAppBadge' in self.navigator) {
+    if (unreadCount > 0) {
+      self.navigator.setAppBadge(unreadCount).catch(() => {});
+    } else {
+      self.navigator.clearAppBadge().catch(() => {});
+    }
+  }
+  if (message.notification) return;
   self.registration.showNotification(data.title || 'MangoTalk', {
     body: data.body || '새 메시지가 도착했어요.',
     icon: 'icons/Icon-192.png',
     badge: 'icons/Icon-192.png',
     data,
   });
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'CLEAR_APP_BADGE') return;
+  if ('clearAppBadge' in self.navigator) {
+    event.waitUntil(self.navigator.clearAppBadge().catch(() => {}));
+  }
 });
 
 self.addEventListener('notificationclick', (event) => {
