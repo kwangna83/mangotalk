@@ -112,7 +112,8 @@ class SupabaseChatRepository implements ChatRepository {
               'sender_id': user.id,
               'client_message_id': clientMessageId,
               'body': body.trim(),
-              'reply_to_message_id': replyToMessageId,
+              if (replyToMessageId != null)
+                'reply_to_message_id': replyToMessageId,
             }, onConflict: 'sender_id,client_message_id')
             .select(
               '*, profiles!messages_sender_id_fkey(nickname, avatar_path)',
