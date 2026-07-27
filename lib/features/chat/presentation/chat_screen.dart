@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:firebase_core/firebase_core.dart' show FirebaseException;
@@ -8,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../../core/constants/chat_constants.dart';
+import '../../../core/platform/image_save.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/validation/input_validators.dart';
 import '../../auth/domain/app_user.dart';
@@ -1204,34 +1207,114 @@ class _MessageImage extends StatelessWidget {
     return const SizedBox(width: 240, height: 160, child: _ImageError());
   }
 
-  Future<void> _showImageViewer(BuildContext context) => showDialog<void>(
-    context: context,
-    barrierColor: Colors.black.withValues(alpha: .92),
-    builder:
-        (context) => Dialog.fullscreen(
-          backgroundColor: Colors.transparent,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: InteractiveViewer(
-                  minScale: .5,
-                  maxScale: 5,
-                  child: Center(child: _image(fit: BoxFit.contain)),
+  Future<void> _showImageViewer(BuildContext context) async {
+    final mimeType = message.imageMimeType ?? 'image/jpeg';
+    final source =
+        message.localImageBytes == null
+            ? message.imageUrl!
+            : 'data:$mimeType;base64,${base64Encode(message.localImageBytes!)}';
+    final cacheKey = message.id;
+    unawaited(
+      prepareImageForSave(
+        source: source,
+        cacheKey: cacheKey,
+        mimeType: mimeType,
+      ).catchError((Object _) {}),
+    );
+    var saving = false;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: .92),
+      builder:
+          (dialogContext) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => Dialog.fullscreen(
+                  backgroundColor: Colors.transparent,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: InteractiveViewer(
+                          minScale: .5,
+                          maxScale: 5,
+                          child: Center(child: _image(fit: BoxFit.contain)),
+                        ),
+                      ),
+                      Positioned(
+                        top: MediaQuery.paddingOf(context).top + 8,
+                        right: 12,
+                        child: Row(
+                          children: [
+                            IconButton.filledTonal(
+                              tooltip: '사진 저장',
+                              onPressed:
+                                  saving
+                                      ? null
+                                      : () async {
+                                        setDialogState(() => saving = true);
+                                        final result = await savePreparedImage(
+                                          cacheKey: cacheKey,
+                                          fileName: _downloadFileName(mimeType),
+                                          mimeType: mimeType,
+                                        );
+                                        if (!dialogContext.mounted) return;
+                                        setDialogState(() => saving = false);
+                                        final notice = switch (result) {
+                                          ImageSaveResult.shared =>
+                                            '공유 메뉴에서 이미지 저장을 선택해 주세요.',
+                                          ImageSaveResult.downloaded =>
+                                            '이미지 다운로드를 시작했어요.',
+                                          ImageSaveResult.failed =>
+                                            '이미지를 저장하지 못했어요.',
+                                          ImageSaveResult.unsupported =>
+                                            '이 환경에서는 이미지 저장을 지원하지 않아요.',
+                                          ImageSaveResult.cancelled => null,
+                                        };
+                                        if (notice != null && context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                            ..hideCurrentSnackBar()
+                                            ..showSnackBar(
+                                              SnackBar(content: Text(notice)),
+                                            );
+                                        }
+                                      },
+                              icon:
+                                  saving
+                                      ? const SizedBox.square(
+                                        dimension: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(Icons.download_rounded),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: '닫기',
+                              onPressed:
+                                  () => Navigator.of(dialogContext).pop(),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 8,
-                right: 12,
-                child: IconButton.filledTonal(
-                  tooltip: '닫기',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ),
-            ],
           ),
-        ),
-  );
+    );
+  }
+
+  String _downloadFileName(String mimeType) {
+    final now = DateTime.now();
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    final extension = switch (mimeType) {
+      'image/png' => 'png',
+      'image/webp' => 'webp',
+      _ => 'jpg',
+    };
+    return 'MangoTalk_${now.year}${twoDigits(now.month)}${twoDigits(now.day)}_'
+        '${twoDigits(now.hour)}${twoDigits(now.minute)}.$extension';
+  }
 }
 
 class _ImageError extends StatelessWidget {
