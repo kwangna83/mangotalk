@@ -53,6 +53,12 @@ Edge Function은 Supabase secret에 저장된 Firebase project ID, client email,
 
 Web service worker는 백그라운드 메시지를 표시하고 `notificationclick`에서 `/mangotalk/?room=<id>`를 연다. 포그라운드에서는 현재 방 여부를 판단해 이미 Realtime으로 보이는 메시지에 중복 시스템 알림을 만들지 않는다.
 
+### Firebase service worker를 앱 범위의 유일한 worker로 사용
+
+Flutter Web의 기본 offline-first service worker와 Firebase Messaging service worker를 같은 `/mangotalk/` 범위에 함께 등록하면 서로 교체되며 백그라운드 알림과 배지 메시지 처리가 불안정해진다. Web release 빌드는 `--pwa-strategy=none`을 사용하고 `firebase-messaging-sw.js`만 등록한다. Firebase worker는 설치 즉시 대기 상태를 건너뛰고 기존 페이지를 제어하여 이전 Flutter worker에서 안정적으로 전환한다.
+
+읽음·로그아웃·알림 비활성화 시 앱은 Window의 Badging API로 배지를 직접 제거하고, worker 메시지도 fallback으로 전달한다. Badging API가 없거나 설치형 PWA가 아닌 환경의 오류는 무시하여 채팅과 알림 구독 흐름을 방해하지 않는다.
+
 ### 멱등 발송 기록
 
 `push_deliveries`에 `(message_id, subscription_id)` 고유 제약과 상태를 기록한다. webhook 재시도 시 기존 성공 건은 건너뛰고, 영구적인 invalid-token 응답은 구독을 비활성화한다.

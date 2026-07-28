@@ -12,6 +12,14 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 messaging.onBackgroundMessage((message) => {
   const data = message.data || {};
   const unreadCount = Number.parseInt(data.unreadCount || '0', 10);

@@ -41,6 +41,7 @@ jobs:
         run: >-
           flutter build web --release
           --base-href /mangotalk/
+          --pwa-strategy=none
           --dart-define=SUPABASE_URL=https://qmzpyoulawdlecmtjkib.supabase.co
           --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_l6Dx4gy4f2aNPD0Kx5e1nA_KvRoqxtb
           --dart-define=FIREBASE_WEB_API_KEY=AIzaSyAq_OejXpUSBpIaAO03e5ymirSl2NRpVjw
