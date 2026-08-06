@@ -20,6 +20,7 @@ import '../../notifications/presentation/notification_controller.dart';
 import '../domain/chat_message.dart';
 import 'chat_controller.dart';
 import 'chat_scroll_target.dart';
+import 'message_copy_actions.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -980,7 +981,10 @@ class _MessageBubble extends StatelessWidget {
             : '${message.senderNickname}의 메시지: ${message.body}, '
                 '전송시간 $_sentAtLabel',
     child: GestureDetector(
-      onLongPress: onReply,
+      onLongPress:
+          message.type == ChatMessageType.image
+              ? onReply
+              : () => _showTextMessageActions(context),
       child: Align(
         alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
         child: Padding(
@@ -1127,6 +1131,27 @@ class _MessageBubble extends StatelessWidget {
       ),
     ),
   );
+
+  Future<void> _showTextMessageActions(BuildContext context) async {
+    final action = await showMessageActionMenu(context);
+    if (!context.mounted || action == null) return;
+
+    switch (action) {
+      case MessageAction.copyAll:
+        await copyMessageToClipboard(message.body);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('메시지를 복사했어요.')));
+        return;
+      case MessageAction.copyPart:
+        await showPartialMessageCopyDialog(context, message: message.body);
+        return;
+      case MessageAction.reply:
+        onReply();
+        return;
+    }
+  }
 
   Widget _messageAvatar(BuildContext context) => _Avatar(
     radius: 16,
