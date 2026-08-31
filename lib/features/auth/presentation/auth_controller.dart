@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,13 +14,28 @@ final authControllerProvider = AsyncNotifierProvider<AuthController, AppUser?>(
 
 class AuthController extends AsyncNotifier<AppUser?> {
   @override
-  Future<AppUser?> build() =>
-      ref.watch(authRepositoryProvider).restoreSession();
+  Future<AppUser?> build() async {
+    final user = await ref.watch(authRepositoryProvider).restoreSession();
+    if (user != null) _startNotifications();
+    return user;
+  }
 
   Future<void> signIn(String nickname) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).signInAnonymously(nickname),
+    );
+    if (state.value != null) _startNotifications();
+  }
+
+  void _startNotifications() {
+    // Push setup must not block session restoration or entry to the chat UI.
+    // Reading the future eagerly starts token sync and keeps the non-autoDispose
+    // controller alive so FCM token refreshes are observed for this app session.
+    unawaited(
+      ref
+          .read(notificationControllerProvider.future)
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}),
     );
   }
 
