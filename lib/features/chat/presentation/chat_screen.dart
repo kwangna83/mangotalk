@@ -18,8 +18,9 @@ import '../../auth/domain/app_user.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../notifications/domain/notification_repository.dart';
 import '../../notifications/presentation/notification_controller.dart';
-import '../domain/chat_message.dart';
 import '../data/chat_image_cache_types.dart';
+import '../data/chat_image_resolver.dart';
+import '../domain/chat_message.dart';
 import 'chat_image_layout.dart';
 import 'chat_controller.dart';
 import 'chat_scroll_target.dart';
@@ -1182,6 +1183,7 @@ class _MessageImage extends ConsumerStatefulWidget {
 }
 
 class _MessageImageState extends ConsumerState<_MessageImage> {
+  late final ChatImageResolver _resolver;
   CachedChatImage? _resolved;
   Object? _error;
 
@@ -1190,6 +1192,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   @override
   void initState() {
     super.initState();
+    _resolver = ref.read(chatImageResolverProvider);
     if (message.localImageBytes == null) unawaited(_resolve());
   }
 
@@ -1216,11 +1219,9 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
     final userId = ref.read(authControllerProvider).value?.id;
     if (userId == null) return;
     try {
-      final result = await ref
-          .read(chatImageResolverProvider)
-          .resolve(message: message, userId: userId);
+      final result = await _resolver.resolve(message: message, userId: userId);
       if (!mounted) {
-        ref.read(chatImageResolverProvider).release(result);
+        _resolver.release(result);
         return;
       }
       setState(() => _resolved = result);
@@ -1232,7 +1233,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   void _releaseResolved() {
     final resolved = _resolved;
     if (resolved != null) {
-      ref.read(chatImageResolverProvider).release(resolved);
+      _resolver.release(resolved);
       _resolved = null;
     }
   }
