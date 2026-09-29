@@ -1184,6 +1184,7 @@ class _MessageImage extends ConsumerStatefulWidget {
 
 class _MessageImageState extends ConsumerState<_MessageImage> {
   late final ChatImageResolver _resolver;
+  late final String? _userId;
   CachedChatImage? _resolved;
   Object? _error;
 
@@ -1193,6 +1194,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   void initState() {
     super.initState();
     _resolver = ref.read(chatImageResolverProvider);
+    _userId = ref.read(authControllerProvider).value?.id;
     if (message.localImageBytes == null) unawaited(_resolve());
   }
 
@@ -1216,7 +1218,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   }
 
   Future<void> _resolve() async {
-    final userId = ref.read(authControllerProvider).value?.id;
+    final userId = _userId;
     if (userId == null) return;
     try {
       final result = await _resolver.resolve(message: message, userId: userId);
