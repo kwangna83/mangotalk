@@ -145,6 +145,10 @@ class _FakeImageCache implements PersistentChatImageCache {
   final List<String> clearedUsers = [];
 
   @override
+  CachedChatImage? getSession({required String key, required String userId}) =>
+      null;
+
+  @override
   Future<void> clearUser(String userId) async {
     if (failClear) throw StateError('quota');
     clearedUsers.add(userId);
@@ -163,6 +167,9 @@ class _FakeImageCache implements PersistentChatImageCache {
   @override
   Future<CachedChatImage?> get({required String key, required String userId}) =>
       throw UnimplementedError();
+
+  @override
+  void retain(CachedChatImage image) {}
 
   @override
   void release(CachedChatImage image) {}

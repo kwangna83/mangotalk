@@ -19,4 +19,14 @@ void main() {
     expect(script, contains('setTimeout'));
     expect(script, contains('mangoTalkChatImageCacheClearUser'));
   });
+
+  test('web cache reuses a bounded session blob LRU', () {
+    expect(script, contains('MAX_SESSION_BLOBS = 50'));
+    expect(script, contains('sessionBlobs.get(operationKey)'));
+    expect(script, contains('entry.refs++'));
+    expect(script, contains('entry.refs = Math.max(0, entry.refs - 1)'));
+    expect(script, contains('entry[1].refs === 0'));
+    expect(script, contains('mangoTalkChatImageCacheRetain'));
+    expect(script, contains('mangoTalkChatImageCachePeek'));
+  });
 }

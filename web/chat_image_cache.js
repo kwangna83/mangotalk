@@ -1,6 +1,7 @@
 (() => {
   if (!('caches' in window)) {
     window.mangoTalkChatImageCacheGet = async () => '';
+    window.mangoTalkChatImageCachePeek = () => '';
     window.mangoTalkChatImageCacheFetch = async (
       _key, _userId, url, _mimeType, width, height,
     ) => JSON.stringify({
@@ -11,6 +12,7 @@
     });
     window.mangoTalkChatImageCacheRemove = async () => {};
     window.mangoTalkChatImageCacheClearUser = async () => {};
+    window.mangoTalkChatImageCacheRetain = () => {};
     window.mangoTalkChatImageCacheRelease = () => {};
     return;
   }
@@ -21,7 +23,10 @@
   const MAX_BYTES = 64 * 1024 * 1024;
   const MAX_ENTRIES = 100;
   const MAX_CONCURRENT = 4;
+  const MAX_SESSION_BLOBS = 50;
   const pending = new Map();
+  const sessionBlobs = new Map();
+  const sessionKeyBySource = new Map();
   const queue = [];
   let active = 0;
   let saveTimer;
@@ -64,16 +69,53 @@
     pump();
   });
 
-  const toResult = async (response, meta) => {
+  const sessionResult = (entry) => JSON.stringify({
+    source: entry.source,
+    isObjectUrl: true,
+    width: entry.width || null,
+    height: entry.height || null,
+  });
+
+  const revokeSessionEntry = (operationKey, entry) => {
+    URL.revokeObjectURL(entry.source);
+    sessionKeyBySource.delete(entry.source);
+    sessionBlobs.delete(operationKey);
+  };
+
+  const trimSessionBlobs = () => {
+    if (sessionBlobs.size <= MAX_SESSION_BLOBS) return;
+    const candidates = [...sessionBlobs.entries()]
+      .filter((entry) => entry[1].refs === 0)
+      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+    while (sessionBlobs.size > MAX_SESSION_BLOBS && candidates.length) {
+      const [operationKey, entry] = candidates.shift();
+      revokeSessionEntry(operationKey, entry);
+    }
+  };
+
+  const acquireSessionBlob = async (operationKey, userId, key, response, meta) => {
+    const existing = sessionBlobs.get(operationKey);
+    if (existing) {
+      existing.refs++;
+      existing.lastAccess = Date.now();
+      return sessionResult(existing);
+    }
     const blob = await response.blob();
     if (!blob.size || !blob.type.startsWith('image/')) throw new Error('invalid-image');
     const source = URL.createObjectURL(blob);
-    return JSON.stringify({
+    const entry = {
       source,
-      isObjectUrl: true,
       width: meta.width || null,
       height: meta.height || null,
-    });
+      userId,
+      key,
+      refs: 1,
+      lastAccess: Date.now(),
+    };
+    sessionBlobs.set(operationKey, entry);
+    sessionKeyBySource.set(source, operationKey);
+    trimSessionBlobs();
+    return sessionResult(entry);
   };
 
   const measureBlob = async (blob) => {
@@ -120,11 +162,21 @@
     const cache = await caches.open(CACHE_NAME);
     await cache.delete(requestFor(key));
     delete loadIndex()[key];
+    for (const [operationKey, entry] of sessionBlobs.entries()) {
+      if (entry.key === key) revokeSessionEntry(operationKey, entry);
+    }
     scheduleSave();
   };
 
   window.mangoTalkChatImageCacheGet = async (key, userId) => {
     try {
+      const operationKey = `${userId}:${key}`;
+      const sessionEntry = sessionBlobs.get(operationKey);
+      if (sessionEntry) {
+        sessionEntry.refs++;
+        sessionEntry.lastAccess = Date.now();
+        return sessionResult(sessionEntry);
+      }
       const meta = loadIndex()[key];
       if (!meta || meta.userId !== userId) return '';
       const cache = await caches.open(CACHE_NAME);
@@ -136,10 +188,18 @@
       }
       meta.lastAccess = Date.now();
       scheduleSave();
-      return await toResult(response, meta);
+      return await acquireSessionBlob(operationKey, userId, key, response, meta);
     } catch (_) {
       return '';
     }
+  };
+
+  window.mangoTalkChatImageCachePeek = (key, userId) => {
+    const entry = sessionBlobs.get(`${userId}:${key}`);
+    if (!entry) return '';
+    entry.refs++;
+    entry.lastAccess = Date.now();
+    return sessionResult(entry);
   };
 
   window.mangoTalkChatImageCacheFetch = (key, userId, url, mimeType, width, height) => {
@@ -177,7 +237,13 @@
         lastAccess: Date.now(),
       };
       await trim(cache);
-      return toResult(new Response(blob, { headers: { 'Content-Type': blob.type || mimeType } }), loadIndex()[key]);
+      return acquireSessionBlob(
+        operationKey,
+        userId,
+        key,
+        new Response(blob, { headers: { 'Content-Type': blob.type || mimeType } }),
+        loadIndex()[key],
+      );
     }).finally(() => pending.delete(operationKey));
     pending.set(operationKey, operation);
     return operation;
@@ -189,9 +255,24 @@
       .filter((entry) => entry[1].userId === userId)
       .map((entry) => entry[0]);
     await Promise.all(keys.map(remove));
+    for (const [operationKey, entry] of sessionBlobs.entries()) {
+      if (entry.userId === userId) revokeSessionEntry(operationKey, entry);
+    }
+  };
+  window.mangoTalkChatImageCacheRetain = (source) => {
+    const operationKey = sessionKeyBySource.get(source);
+    const entry = operationKey ? sessionBlobs.get(operationKey) : null;
+    if (!entry) return;
+    entry.refs++;
+    entry.lastAccess = Date.now();
   };
   window.mangoTalkChatImageCacheRelease = (source) => {
-    if (source.startsWith('blob:')) URL.revokeObjectURL(source);
+    const operationKey = sessionKeyBySource.get(source);
+    const entry = operationKey ? sessionBlobs.get(operationKey) : null;
+    if (!entry) return;
+    entry.refs = Math.max(0, entry.refs - 1);
+    entry.lastAccess = Date.now();
+    trimSessionBlobs();
   };
 
   caches.keys().then((names) => Promise.all(

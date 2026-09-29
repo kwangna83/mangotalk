@@ -13,6 +13,8 @@ class CachedChatImage {
 }
 
 abstract interface class PersistentChatImageCache {
+  CachedChatImage? getSession({required String key, required String userId});
+
   Future<CachedChatImage?> get({required String key, required String userId});
 
   Future<CachedChatImage> downloadAndStore({
@@ -27,6 +29,8 @@ abstract interface class PersistentChatImageCache {
   Future<void> remove(String key);
 
   Future<void> clearUser(String userId);
+
+  void retain(CachedChatImage image);
 
   void release(CachedChatImage image);
 }

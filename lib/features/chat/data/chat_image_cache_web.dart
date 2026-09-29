@@ -6,6 +6,9 @@ import 'chat_image_cache_types.dart';
 @JS('mangoTalkChatImageCacheGet')
 external JSPromise<JSString> _cacheGet(JSString key, JSString userId);
 
+@JS('mangoTalkChatImageCachePeek')
+external JSString _cachePeek(JSString key, JSString userId);
+
 @JS('mangoTalkChatImageCacheFetch')
 external JSPromise<JSString> _cacheFetch(
   JSString key,
@@ -25,10 +28,19 @@ external JSPromise<JSAny?> _cacheClearUser(JSString userId);
 @JS('mangoTalkChatImageCacheRelease')
 external void _cacheRelease(JSString source);
 
+@JS('mangoTalkChatImageCacheRetain')
+external void _cacheRetain(JSString source);
+
 PersistentChatImageCache createPersistentChatImageCache() =>
     _WebChatImageCache();
 
 class _WebChatImageCache implements PersistentChatImageCache {
+  @override
+  CachedChatImage? getSession({required String key, required String userId}) {
+    final value = _cachePeek(key.toJS, userId.toJS).toDart;
+    return value.isEmpty ? null : _decode(value);
+  }
+
   @override
   Future<CachedChatImage?> get({
     required String key,
@@ -69,6 +81,11 @@ class _WebChatImageCache implements PersistentChatImageCache {
   @override
   Future<void> clearUser(String userId) async {
     await _cacheClearUser(userId.toJS).toDart;
+  }
+
+  @override
+  void retain(CachedChatImage image) {
+    if (image.isObjectUrl) _cacheRetain(image.source.toJS);
   }
 
   @override

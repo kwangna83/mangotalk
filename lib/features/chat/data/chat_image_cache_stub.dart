@@ -5,6 +5,10 @@ PersistentChatImageCache createPersistentChatImageCache() =>
 
 class _NetworkChatImageCache implements PersistentChatImageCache {
   @override
+  CachedChatImage? getSession({required String key, required String userId}) =>
+      null;
+
+  @override
   Future<CachedChatImage?> get({
     required String key,
     required String userId,
@@ -30,6 +34,9 @@ class _NetworkChatImageCache implements PersistentChatImageCache {
 
   @override
   Future<void> clearUser(String userId) async {}
+
+  @override
+  void retain(CachedChatImage image) {}
 
   @override
   void release(CachedChatImage image) {}

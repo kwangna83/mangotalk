@@ -9,6 +9,18 @@ class ChatImageResolver {
   final ChatRepository repository;
   final Map<String, Future<CachedChatImage>> _inFlight = {};
 
+  CachedChatImage? getSession({
+    required ChatMessage message,
+    required String userId,
+  }) => cache.getSession(
+    key: chatImageCacheKey(
+      attachmentId: message.attachmentId,
+      bucket: message.attachmentBucket,
+      path: message.attachmentPath,
+    ),
+    userId: userId,
+  );
+
   Future<CachedChatImage> resolve({
     required ChatMessage message,
     required String userId,
@@ -18,13 +30,23 @@ class ChatImageResolver {
       bucket: message.attachmentBucket,
       path: message.attachmentPath,
     );
-    return _inFlight.putIfAbsent(
-      '$userId:$key',
-      () =>
-          _resolve(key: key, message: message, userId: userId).whenComplete(() {
-            _inFlight.remove('$userId:$key');
-          }),
-    );
+    final operationKey = '$userId:$key';
+    final existing = _inFlight[operationKey];
+    if (existing != null) {
+      return existing.then((image) {
+        cache.retain(image);
+        return image;
+      });
+    }
+    final operation = _resolve(
+      key: key,
+      message: message,
+      userId: userId,
+    ).whenComplete(() {
+      _inFlight.remove(operationKey);
+    });
+    _inFlight[operationKey] = operation;
+    return operation;
   }
 
   Future<CachedChatImage> _resolve({

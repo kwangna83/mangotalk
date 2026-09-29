@@ -41,4 +41,54 @@ void main() {
       expect(directionToMessage(targetIndex: 6, visibleIndices: [5, 6, 7]), 0);
     });
   });
+
+  group('preserveScrollOffsetAfterPrepend', () {
+    test('과거 메시지 높이만큼 offset을 이동해 기존 위치를 유지한다', () {
+      expect(
+        preserveScrollOffsetAfterPrepend(
+          previousPixels: 80,
+          previousMaxScrollExtent: 1000,
+          nextMaxScrollExtent: 1750,
+          minScrollExtent: 0,
+        ),
+        830,
+      );
+    });
+
+    test('추가된 높이가 없으면 현재 위치를 유지한다', () {
+      expect(
+        preserveScrollOffsetAfterPrepend(
+          previousPixels: 80,
+          previousMaxScrollExtent: 1000,
+          nextMaxScrollExtent: 1000,
+          minScrollExtent: 0,
+        ),
+        80,
+      );
+    });
+  });
+
+  group('shouldFollowLatestMessage', () {
+    test('내 메시지는 과거 위치에서도 최신 위치를 따라간다', () {
+      expect(
+        shouldFollowLatestMessage(
+          isMine: true,
+          hasScrollClients: true,
+          distanceFromBottom: 5000,
+        ),
+        isTrue,
+      );
+    });
+
+    test('다른 사용자 메시지는 과거 위치를 유지한다', () {
+      expect(
+        shouldFollowLatestMessage(
+          isMine: false,
+          hasScrollClients: true,
+          distanceFromBottom: 5000,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

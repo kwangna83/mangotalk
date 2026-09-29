@@ -77,13 +77,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted || !_scroll.hasClients) return;
-      final addedExtent =
-          _scroll.position.maxScrollExtent - previousMaxScrollExtent;
-      if (addedExtent <= 0) return;
       _scroll.jumpTo(
-        (previousPixels + addedExtent).clamp(
-          _scroll.position.minScrollExtent,
-          _scroll.position.maxScrollExtent,
+        preserveScrollOffsetAfterPrepend(
+          previousPixels: previousPixels,
+          previousMaxScrollExtent: previousMaxScrollExtent,
+          nextMaxScrollExtent: _scroll.position.maxScrollExtent,
+          minScrollExtent: _scroll.position.minScrollExtent,
         ),
       );
     } catch (_) {
@@ -311,10 +310,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
     if (_latestMessageId == messageId) return;
-    final shouldFollow =
-        isMine ||
-        !_scroll.hasClients ||
-        _scroll.position.maxScrollExtent - _scroll.position.pixels <= 120;
+    final shouldFollow = shouldFollowLatestMessage(
+      isMine: isMine,
+      hasScrollClients: _scroll.hasClients,
+      distanceFromBottom:
+          _scroll.hasClients
+              ? _scroll.position.maxScrollExtent - _scroll.position.pixels
+              : 0,
+    );
     _latestMessageId = messageId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -1195,7 +1198,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
     super.initState();
     _resolver = ref.read(chatImageResolverProvider);
     _userId = ref.read(authControllerProvider).value?.id;
-    if (message.localImageBytes == null) unawaited(_resolve());
+    if (message.localImageBytes == null) _resolveSessionFirst();
   }
 
   @override
@@ -1208,7 +1211,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
     }
     _releaseResolved();
     _error = null;
-    if (message.localImageBytes == null) unawaited(_resolve());
+    if (message.localImageBytes == null) _resolveSessionFirst();
   }
 
   @override
@@ -1230,6 +1233,17 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
     } catch (error) {
       if (mounted) setState(() => _error = error);
     }
+  }
+
+  void _resolveSessionFirst() {
+    final userId = _userId;
+    if (userId == null) return;
+    final session = _resolver.getSession(message: message, userId: userId);
+    if (session != null) {
+      _resolved = session;
+      return;
+    }
+    unawaited(_resolve());
   }
 
   void _releaseResolved() {

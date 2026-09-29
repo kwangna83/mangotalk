@@ -35,6 +35,19 @@ void main() {
     expect(repository.urlRequests, 0);
   });
 
+  test('session hit is available synchronously for the first frame', () {
+    final cache = _FakeCache(
+      hit: const CachedChatImage(source: 'blob:session', isObjectUrl: true),
+    );
+    final repository = _FakeRepository();
+    final resolver = ChatImageResolver(cache: cache, repository: repository);
+
+    final result = resolver.getSession(message: message, userId: 'user-1');
+
+    expect(result?.source, 'blob:session');
+    expect(repository.urlRequests, 0);
+  });
+
   test('simultaneous misses share one URL request and download', () async {
     final cache = _FakeCache();
     final repository = _FakeRepository();
@@ -51,6 +64,7 @@ void main() {
     );
     expect(repository.urlRequests, 1);
     expect(cache.downloads, 1);
+    expect(cache.retains, 1);
   });
 
   test('cache write failure falls back to the private network URL', () async {
@@ -71,6 +85,11 @@ class _FakeCache implements PersistentChatImageCache {
   final CachedChatImage? hit;
   final bool failDownload;
   int downloads = 0;
+  int retains = 0;
+
+  @override
+  CachedChatImage? getSession({required String key, required String userId}) =>
+      hit;
 
   @override
   Future<CachedChatImage?> get({
@@ -98,6 +117,9 @@ class _FakeCache implements PersistentChatImageCache {
 
   @override
   Future<void> remove(String key) async {}
+
+  @override
+  void retain(CachedChatImage image) => retains++;
 
   @override
   void release(CachedChatImage image) {}

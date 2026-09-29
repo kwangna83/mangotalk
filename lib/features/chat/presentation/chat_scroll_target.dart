@@ -23,3 +23,23 @@ int directionToMessage({
   if (targetIndex > last) return 1;
   return 0;
 }
+
+double preserveScrollOffsetAfterPrepend({
+  required double previousPixels,
+  required double previousMaxScrollExtent,
+  required double nextMaxScrollExtent,
+  required double minScrollExtent,
+}) {
+  final addedExtent = nextMaxScrollExtent - previousMaxScrollExtent;
+  if (addedExtent <= 0) return previousPixels;
+  return (previousPixels + addedExtent).clamp(
+    minScrollExtent,
+    nextMaxScrollExtent,
+  );
+}
+
+bool shouldFollowLatestMessage({
+  required bool isMine,
+  required bool hasScrollClients,
+  required double distanceFromBottom,
+}) => isMine || !hasScrollClients || distanceFromBottom <= 120;
