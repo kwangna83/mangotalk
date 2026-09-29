@@ -40,9 +40,17 @@ class AuthController extends AsyncNotifier<AppUser?> {
   }
 
   Future<void> signOut() async {
+    final userId = state.value?.id;
     await ref
         .read(notificationControllerProvider.notifier)
         .disableCurrentSubscription();
+    if (userId != null) {
+      try {
+        await ref.read(chatImageCacheProvider).clearUser(userId);
+      } catch (_) {
+        // Private cache cleanup is best-effort and must not block sign-out.
+      }
+    }
     await ref.read(authRepositoryProvider).signOut();
     await clearAppBadge();
     state = const AsyncData(null);

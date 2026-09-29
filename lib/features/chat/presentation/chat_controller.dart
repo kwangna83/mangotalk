@@ -10,6 +10,7 @@ import '../../../core/providers/repository_providers.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/chat_message.dart';
 import '../domain/chat_repository.dart';
+import '../domain/image_dimensions.dart';
 
 class ChatState {
   const ChatState({
@@ -195,6 +196,7 @@ class ChatController extends AsyncNotifier<ChatState> {
     final current = state.value;
     final user = ref.read(authControllerProvider).value;
     if (current?.roomId == null || user == null) return;
+    final dimensions = await readImageDimensions(bytes);
     final clientId = clientMessageId ?? const Uuid().v4();
     final optimistic = ChatMessage(
       id: 'local:$clientId',
@@ -208,6 +210,8 @@ class ChatController extends AsyncNotifier<ChatState> {
       type: ChatMessageType.image,
       localImageBytes: bytes,
       imageMimeType: mimeType,
+      imageWidth: dimensions.width,
+      imageHeight: dimensions.height,
       status: MessageSendStatus.sending,
     );
     _merge(optimistic);
@@ -219,6 +223,7 @@ class ChatController extends AsyncNotifier<ChatState> {
           bytes: bytes,
           fileName: fileName,
           mimeType: mimeType,
+          dimensions: dimensions,
         ),
       );
     } catch (_) {

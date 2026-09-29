@@ -18,6 +18,11 @@ class ChatMessage {
     this.imageUrl,
     this.localImageBytes,
     this.imageMimeType,
+    this.attachmentId,
+    this.attachmentBucket,
+    this.attachmentPath,
+    this.imageWidth,
+    this.imageHeight,
     this.replyToMessageId,
     this.replySenderNickname,
     this.replyBody,
@@ -37,6 +42,11 @@ class ChatMessage {
   final String? imageUrl;
   final Uint8List? localImageBytes;
   final String? imageMimeType;
+  final String? attachmentId;
+  final String? attachmentBucket;
+  final String? attachmentPath;
+  final int? imageWidth;
+  final int? imageHeight;
   final String? replyToMessageId;
   final String? replySenderNickname;
   final String? replyBody;
@@ -64,6 +74,11 @@ class ChatMessage {
       imageUrl: imageUrl ?? this.imageUrl,
       localImageBytes: localImageBytes,
       imageMimeType: imageMimeType,
+      attachmentId: attachmentId,
+      attachmentBucket: attachmentBucket,
+      attachmentPath: attachmentPath,
+      imageWidth: imageWidth,
+      imageHeight: imageHeight,
       replyToMessageId: replyToMessageId,
       replySenderNickname: replySenderNickname,
       replyBody: replyBody,
@@ -91,6 +106,11 @@ class ChatMessage {
               : ChatMessageType.text,
       imageUrl: json['image_url'] as String?,
       imageMimeType: json['attachment_mime_type'] as String?,
+      attachmentId: json['attachment_id'] as String?,
+      attachmentBucket: json['attachment_bucket'] as String?,
+      attachmentPath: json['attachment_path'] as String?,
+      imageWidth: json['attachment_width'] as int?,
+      imageHeight: json['attachment_height'] as int?,
       replyToMessageId: json['reply_to_message_id'] as String?,
       replySenderNickname: json['reply_sender_nickname'] as String?,
       replyBody: json['reply_body'] as String?,

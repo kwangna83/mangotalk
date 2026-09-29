@@ -6,6 +6,7 @@ import 'package:mangotalk/core/providers/repository_providers.dart';
 import 'package:mangotalk/features/auth/domain/app_user.dart';
 import 'package:mangotalk/features/auth/domain/auth_repository.dart';
 import 'package:mangotalk/features/auth/presentation/auth_controller.dart';
+import 'package:mangotalk/features/chat/data/chat_image_cache_types.dart';
 import 'package:mangotalk/features/notifications/domain/notification_repository.dart';
 import 'package:mangotalk/features/notifications/presentation/notification_controller.dart';
 
@@ -49,12 +50,55 @@ void main() {
       expect(container.read(authControllerProvider).value, user);
     },
   );
+
+  test('sign out clears private image cache without blocking auth', () async {
+    final auth = _FakeAuthRepository(user);
+    final cache = _FakeImageCache();
+    final notifications = _FakeNotificationController();
+    final container = ProviderContainer(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(auth),
+        chatImageCacheProvider.overrideWithValue(cache),
+        notificationControllerProvider.overrideWith(() => notifications),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(authControllerProvider.future);
+    await container.read(authControllerProvider.notifier).signOut();
+
+    expect(cache.clearedUsers, ['user-1']);
+    expect(auth.signOutCount, 1);
+    expect(container.read(authControllerProvider).value, isNull);
+  });
+
+  test('cache cleanup failure does not block sign out', () async {
+    final auth = _FakeAuthRepository(user);
+    final container = ProviderContainer(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(auth),
+        chatImageCacheProvider.overrideWithValue(
+          _FakeImageCache(failClear: true),
+        ),
+        notificationControllerProvider.overrideWith(
+          _FakeNotificationController.new,
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(authControllerProvider.future);
+    await container.read(authControllerProvider.notifier).signOut();
+
+    expect(auth.signOutCount, 1);
+  });
 }
 
 class _FakeAuthRepository implements AuthRepository {
-  const _FakeAuthRepository(this.restoredUser);
+  _FakeAuthRepository(this.restoredUser);
 
   final AppUser? restoredUser;
+  int signOutCount = 0;
 
   @override
   Future<AppUser?> restoreSession() async => restoredUser;
@@ -65,7 +109,7 @@ class _FakeAuthRepository implements AuthRepository {
       AppUser(id: 'user-1', nickname: nickname, isAnonymous: true);
 
   @override
-  Future<void> signOut() async {}
+  Future<void> signOut() async => signOutCount++;
 
   @override
   Future<AppUser> updateProfile({
@@ -80,6 +124,9 @@ class _FakeNotificationController extends NotificationController {
   int buildCount = 0;
 
   @override
+  Future<void> disableCurrentSubscription() async {}
+
+  @override
   Future<PushPermissionStatus> build() async {
     buildCount++;
     return PushPermissionStatus.authorized;
@@ -89,4 +136,37 @@ class _FakeNotificationController extends NotificationController {
 class _FailingNotificationController extends NotificationController {
   @override
   Future<PushPermissionStatus> build() async => throw StateError('FCM failed');
+}
+
+class _FakeImageCache implements PersistentChatImageCache {
+  _FakeImageCache({this.failClear = false});
+
+  final bool failClear;
+  final List<String> clearedUsers = [];
+
+  @override
+  Future<void> clearUser(String userId) async {
+    if (failClear) throw StateError('quota');
+    clearedUsers.add(userId);
+  }
+
+  @override
+  Future<CachedChatImage> downloadAndStore({
+    required String key,
+    required String userId,
+    required String url,
+    required String mimeType,
+    int? width,
+    int? height,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<CachedChatImage?> get({required String key, required String userId}) =>
+      throw UnimplementedError();
+
+  @override
+  void release(CachedChatImage image) {}
+
+  @override
+  Future<void> remove(String key) async {}
 }

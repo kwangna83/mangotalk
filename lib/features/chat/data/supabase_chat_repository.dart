@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/chat_constants.dart';
 import '../domain/chat_message.dart';
 import '../domain/chat_repository.dart';
+import '../domain/image_dimensions.dart';
 
 class SupabaseChatRepository implements ChatRepository {
   SupabaseChatRepository(this._client);
@@ -129,6 +130,7 @@ class SupabaseChatRepository implements ChatRepository {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    required ImageDimensions dimensions,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('로그인이 필요합니다.');
@@ -152,6 +154,8 @@ class SupabaseChatRepository implements ChatRepository {
           'p_storage_path': storagePath,
           'p_mime_type': mimeType,
           'p_size_bytes': bytes.length,
+          'p_width': dimensions.width,
+          'p_height': dimensions.height,
         },
       );
       return _fetchMessage(messageId as String);
@@ -166,6 +170,8 @@ class SupabaseChatRepository implements ChatRepository {
             'p_storage_path': storagePath,
             'p_mime_type': mimeType,
             'p_size_bytes': bytes.length,
+            'p_width': dimensions.width,
+            'p_height': dimensions.height,
           },
         );
         return _fetchMessage(messageId as String);
@@ -252,23 +258,28 @@ class SupabaseChatRepository implements ChatRepository {
     }
     final path =
         (row['attachment_path'] ?? attachment?['storage_path']) as String?;
-    String? imageUrl;
-    if (path != null) {
-      imageUrl = await _client.storage
-          .from(
-            (row['attachment_bucket'] ??
-                    attachment?['storage_bucket'] ??
-                    _imageBucket)
-                as String,
-          )
-          .createSignedUrl(path, 3600);
-    }
     return _message({
       ...row,
-      'image_url': imageUrl,
+      'attachment_id': row['attachment_id'] ?? attachment?['id'],
+      'attachment_bucket':
+          row['attachment_bucket'] ??
+          attachment?['storage_bucket'] ??
+          (path == null ? null : _imageBucket),
+      'attachment_path': path,
       'attachment_mime_type':
           row['attachment_mime_type'] ?? attachment?['mime_type'],
+      'attachment_width': row['attachment_width'] ?? attachment?['width'],
+      'attachment_height': row['attachment_height'] ?? attachment?['height'],
     });
+  }
+
+  @override
+  Future<String?> createImageUrl(ChatMessage message) async {
+    final path = message.attachmentPath;
+    if (path == null) return message.imageUrl;
+    return _client.storage
+        .from(message.attachmentBucket ?? _imageBucket)
+        .createSignedUrl(path, 3600);
   }
 
   ChatMessage _message(Map<String, dynamic> row) {

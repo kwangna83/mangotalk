@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'chat_message.dart';
+import 'image_dimensions.dart';
 
 typedef MessageListener = void Function(ChatMessage message);
 typedef ConnectionListener = void Function();
@@ -43,7 +44,10 @@ abstract interface class ChatRepository {
     required Uint8List bytes,
     required String fileName,
     required String mimeType,
+    required ImageDimensions dimensions,
   });
+
+  Future<String?> createImageUrl(ChatMessage message);
 
   Future<ChatSubscription> subscribe({
     required String roomId,

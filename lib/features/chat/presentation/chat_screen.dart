@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../../../core/constants/chat_constants.dart';
 import '../../../core/platform/image_save.dart';
+import '../../../core/providers/repository_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/validation/input_validators.dart';
 import '../../auth/domain/app_user.dart';
@@ -18,6 +19,8 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../notifications/domain/notification_repository.dart';
 import '../../notifications/presentation/notification_controller.dart';
 import '../domain/chat_message.dart';
+import '../data/chat_image_cache_types.dart';
+import 'chat_image_layout.dart';
 import 'chat_controller.dart';
 import 'chat_scroll_target.dart';
 import 'message_copy_actions.dart';
@@ -1170,9 +1173,69 @@ class _MessageBubble extends StatelessWidget {
   );
 }
 
-class _MessageImage extends StatelessWidget {
+class _MessageImage extends ConsumerStatefulWidget {
   const _MessageImage({required this.message});
   final ChatMessage message;
+
+  @override
+  ConsumerState<_MessageImage> createState() => _MessageImageState();
+}
+
+class _MessageImageState extends ConsumerState<_MessageImage> {
+  CachedChatImage? _resolved;
+  Object? _error;
+
+  ChatMessage get message => widget.message;
+
+  @override
+  void initState() {
+    super.initState();
+    if (message.localImageBytes == null) unawaited(_resolve());
+  }
+
+  @override
+  void didUpdateWidget(covariant _MessageImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.message.id == message.id &&
+        oldWidget.message.imageUrl == message.imageUrl &&
+        oldWidget.message.attachmentId == message.attachmentId) {
+      return;
+    }
+    _releaseResolved();
+    _error = null;
+    if (message.localImageBytes == null) unawaited(_resolve());
+  }
+
+  @override
+  void dispose() {
+    _releaseResolved();
+    super.dispose();
+  }
+
+  Future<void> _resolve() async {
+    final userId = ref.read(authControllerProvider).value?.id;
+    if (userId == null) return;
+    try {
+      final result = await ref
+          .read(chatImageResolverProvider)
+          .resolve(message: message, userId: userId);
+      if (!mounted) {
+        ref.read(chatImageResolverProvider).release(result);
+        return;
+      }
+      setState(() => _resolved = result);
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  void _releaseResolved() {
+    final resolved = _resolved;
+    if (resolved != null) {
+      ref.read(chatImageResolverProvider).release(resolved);
+      _resolved = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1184,18 +1247,14 @@ class _MessageImage extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap:
-              message.localImageBytes != null || message.imageUrl != null
+              message.localImageBytes != null || _resolved != null
                   ? () => _showImageViewer(context)
                   : null,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: 120,
-                maxWidth: 260,
-                minHeight: 80,
-                maxHeight: 320,
-              ),
+            child: ChatImageFrame(
+              width: message.imageWidth ?? _resolved?.width,
+              height: message.imageHeight ?? _resolved?.height,
               child: _image(fit: BoxFit.contain),
             ),
           ),
@@ -1206,13 +1265,21 @@ class _MessageImage extends StatelessWidget {
 
   Widget _image({required BoxFit fit}) {
     final bytes = message.localImageBytes;
-    final imageUrl = message.imageUrl;
-    if (bytes != null) return Image.memory(bytes, fit: fit);
-    if (imageUrl != null) {
-      return Image.network(
-        imageUrl,
+    if (bytes != null) {
+      return Image.memory(
+        bytes,
         fit: fit,
-        cacheWidth: 1040,
+        cacheWidth: 780,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.medium,
+      );
+    }
+    final source = _resolved?.source;
+    if (source != null) {
+      return Image.network(
+        source,
+        fit: fit,
+        cacheWidth: 780,
         gaplessPlayback: true,
         filterQuality: FilterQuality.medium,
         loadingBuilder:
@@ -1220,8 +1287,6 @@ class _MessageImage extends StatelessWidget {
                 progress == null
                     ? child
                     : const SizedBox(
-                      width: 120,
-                      height: 120,
                       child: Center(child: CircularProgressIndicator()),
                     ),
         errorBuilder:
@@ -1229,14 +1294,16 @@ class _MessageImage extends StatelessWidget {
                 const SizedBox(width: 240, height: 160, child: _ImageError()),
       );
     }
-    return const SizedBox(width: 240, height: 160, child: _ImageError());
+    return _error == null
+        ? const Center(child: CircularProgressIndicator())
+        : const _ImageError();
   }
 
   Future<void> _showImageViewer(BuildContext context) async {
     final mimeType = message.imageMimeType ?? 'image/jpeg';
     final source =
         message.localImageBytes == null
-            ? message.imageUrl!
+            ? _resolved!.source
             : 'data:$mimeType;base64,${base64Encode(message.localImageBytes!)}';
     final cacheKey = message.id;
     unawaited(
