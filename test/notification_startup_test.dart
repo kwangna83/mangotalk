@@ -68,6 +68,10 @@ void main() {
     await container.read(authControllerProvider.notifier).signOut();
 
     expect(cache.clearedUsers, ['user-1']);
+    expect(
+      container.read(decodedChatImageCacheProvider).generation('user-1'),
+      1,
+    );
     expect(auth.signOutCount, 1);
     expect(container.read(authControllerProvider).value, isNull);
   });

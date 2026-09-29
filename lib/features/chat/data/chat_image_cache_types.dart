@@ -4,12 +4,14 @@ class CachedChatImage {
     required this.isObjectUrl,
     this.width,
     this.height,
+    this.previewSource,
   });
 
   final String source;
   final bool isObjectUrl;
   final int? width;
   final int? height;
+  final String? previewSource;
 }
 
 abstract interface class PersistentChatImageCache {

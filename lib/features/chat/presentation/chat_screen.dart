@@ -22,6 +22,7 @@ import '../data/chat_image_cache_types.dart';
 import '../data/chat_image_resolver.dart';
 import '../domain/chat_message.dart';
 import 'chat_image_layout.dart';
+import 'chat_thumbnail.dart';
 import 'chat_controller.dart';
 import 'chat_scroll_target.dart';
 import 'message_copy_actions.dart';
@@ -1190,6 +1191,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   late final String? _userId;
   CachedChatImage? _resolved;
   Object? _error;
+  int _resolveRequest = 0;
 
   ChatMessage get message => widget.message;
 
@@ -1223,15 +1225,18 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   Future<void> _resolve() async {
     final userId = _userId;
     if (userId == null) return;
+    final request = ++_resolveRequest;
     try {
       final result = await _resolver.resolve(message: message, userId: userId);
-      if (!mounted) {
+      if (!mounted || request != _resolveRequest) {
         _resolver.release(result);
         return;
       }
       setState(() => _resolved = result);
     } catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted && request == _resolveRequest) {
+        setState(() => _error = error);
+      }
     }
   }
 
@@ -1247,6 +1252,7 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
   }
 
   void _releaseResolved() {
+    _resolveRequest++;
     final resolved = _resolved;
     if (resolved != null) {
       _resolver.release(resolved);
@@ -1272,7 +1278,14 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
             child: ChatImageFrame(
               width: message.imageWidth ?? _resolved?.width,
               height: message.imageHeight ?? _resolved?.height,
-              child: _image(fit: BoxFit.contain),
+              child:
+                  _resolved != null && _userId != null
+                      ? ChatThumbnail(
+                        cache: ref.watch(decodedChatImageCacheProvider),
+                        userId: _userId,
+                        source: _resolved!.previewSource ?? _resolved!.source,
+                      )
+                      : _image(fit: BoxFit.contain),
             ),
           ),
         ),
@@ -1296,7 +1309,6 @@ class _MessageImageState extends ConsumerState<_MessageImage> {
       return Image.network(
         source,
         fit: fit,
-        cacheWidth: 780,
         gaplessPlayback: true,
         filterQuality: FilterQuality.medium,
         loadingBuilder:

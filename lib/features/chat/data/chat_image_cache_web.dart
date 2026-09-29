@@ -100,6 +100,7 @@ class _WebChatImageCache implements PersistentChatImageCache {
       isObjectUrl: json['isObjectUrl'] as bool? ?? true,
       width: json['width'] as int?,
       height: json['height'] as int?,
+      previewSource: json['previewSource'] as String?,
     );
   }
 }

@@ -45,6 +45,7 @@ class AuthController extends AsyncNotifier<AppUser?> {
         .read(notificationControllerProvider.notifier)
         .disableCurrentSubscription();
     if (userId != null) {
+      ref.read(decodedChatImageCacheProvider).clearUser(userId);
       try {
         await ref.read(chatImageCacheProvider).clearUser(userId);
       } catch (_) {

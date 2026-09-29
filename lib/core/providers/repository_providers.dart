@@ -8,6 +8,7 @@ import '../../features/chat/data/supabase_chat_repository.dart';
 import '../../features/chat/data/chat_image_cache.dart';
 import '../../features/chat/data/chat_image_resolver.dart';
 import '../../features/chat/domain/chat_repository.dart';
+import '../../features/chat/presentation/decoded_chat_image_cache.dart';
 import '../../features/notifications/data/firebase_notification_repository.dart';
 import '../../features/notifications/domain/notification_repository.dart';
 import '../config/app_config.dart';
@@ -28,6 +29,12 @@ final chatRepositoryProvider = Provider<ChatRepository>(
 final chatImageCacheProvider = Provider<PersistentChatImageCache>(
   (ref) => createPersistentChatImageCache(),
 );
+
+final decodedChatImageCacheProvider = Provider<DecodedChatImageCache>((ref) {
+  final cache = DecodedChatImageCache();
+  ref.onDispose(cache.dispose);
+  return cache;
+});
 
 final chatImageResolverProvider = Provider<ChatImageResolver>(
   (ref) => ChatImageResolver(

@@ -24,6 +24,7 @@
   const MAX_ENTRIES = 100;
   const MAX_CONCURRENT = 4;
   const MAX_SESSION_BLOBS = 50;
+  const PREVIEW_MAX_EDGE = 960;
   const pending = new Map();
   const sessionBlobs = new Map();
   const sessionKeyBySource = new Map();
@@ -74,10 +75,14 @@
     isObjectUrl: true,
     width: entry.width || null,
     height: entry.height || null,
+    previewSource: entry.previewSource,
   });
 
   const revokeSessionEntry = (operationKey, entry) => {
     URL.revokeObjectURL(entry.source);
+    if (entry.previewSource && entry.previewSource !== entry.source) {
+      URL.revokeObjectURL(entry.previewSource);
+    }
     sessionKeyBySource.delete(entry.source);
     sessionBlobs.delete(operationKey);
   };
@@ -93,6 +98,29 @@
     }
   };
 
+  // Resize actual pixels before Flutter decodes them. cacheWidth alone is not
+  // a dependable Web resize mechanism. The original blob remains untouched.
+  const makePreview = async (blob) => {
+    if (!('createImageBitmap' in window)) return null;
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+      if (scale === 1) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('preview-canvas-unavailable');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      return await new Promise((resolve, reject) => canvas.toBlob(
+        (preview) => preview ? resolve(preview) : reject(new Error('preview-encode-failed')),
+        'image/png',
+      ));
+    } finally {
+      bitmap.close();
+    }
+  };
+
   const acquireSessionBlob = async (operationKey, userId, key, response, meta) => {
     const existing = sessionBlobs.get(operationKey);
     if (existing) {
@@ -102,9 +130,20 @@
     }
     const blob = await response.blob();
     if (!blob.size || !blob.type.startsWith('image/')) throw new Error('invalid-image');
+    let preview;
+    try { preview = await makePreview(blob); }
+    catch (_) { /* Original remains usable if browser resizing fails. */ }
+    // Another reader may have completed while decoding the preview.
+    const concurrent = sessionBlobs.get(operationKey);
+    if (concurrent) {
+      concurrent.refs++;
+      concurrent.lastAccess = Date.now();
+      return sessionResult(concurrent);
+    }
     const source = URL.createObjectURL(blob);
     const entry = {
       source,
+      previewSource: preview ? URL.createObjectURL(preview) : source,
       width: meta.width || null,
       height: meta.height || null,
       userId,
@@ -188,7 +227,7 @@
       }
       meta.lastAccess = Date.now();
       scheduleSave();
-      return await acquireSessionBlob(operationKey, userId, key, response, meta);
+      return await runLimited(() => acquireSessionBlob(operationKey, userId, key, response, meta));
     } catch (_) {
       return '';
     }
@@ -227,7 +266,7 @@
         await trim(cache);
         await cache.put(requestFor(key), storedResponse());
       }
-      loadIndex()[key] = {
+      const meta = {
         userId,
         mimeType: blob.type || mimeType,
         size: blob.size,
@@ -236,13 +275,14 @@
         createdAt: Date.now(),
         lastAccess: Date.now(),
       };
+      loadIndex()[key] = meta;
       await trim(cache);
       return acquireSessionBlob(
         operationKey,
         userId,
         key,
         new Response(blob, { headers: { 'Content-Type': blob.type || mimeType } }),
-        loadIndex()[key],
+        meta,
       );
     }).finally(() => pending.delete(operationKey));
     pending.set(operationKey, operation);
