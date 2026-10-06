@@ -70,4 +70,11 @@
 
 - [x] 8.1 Web에서 미지원되는 `ImageDescriptor.width/height` 호출을 JPEG·PNG·WebP 헤더 크기 파싱으로 교체한다
 - [x] 8.2 포맷별 크기 판독과 손상·잘림 바이트 거부 회귀 테스트를 추가한다
-- [ ] 8.3 정적 분석·전체 테스트·release Web 빌드 후 운영 Chrome에서 이미지 업로드를 재검증한다
+- [x] 8.3 정적 분석·전체 테스트·release Web 빌드 후 운영 Chrome에서 이미지 업로드를 재검증한다
+
+### 8차 검증 기록 (2026-10-06)
+
+- 수정 전 운영 Chrome에서 PNG 선택 직후 `ImageDescriptor.width is not supported on web` 경로의 예외와 업로드 중단을 재현했다.
+- 배포 코드: `be01a16`, GitHub Actions `37403738505` 성공.
+- Flutter 테스트 45개, Node 이미지 세션 테스트 6개, 정적 분석, release Web 빌드, OpenSpec strict 검증을 통과했다.
+- 운영 Chrome에서 MangoTalk PNG가 내 이미지 메시지로 즉시 표시되고, 새로고침 후에도 다시 조회되는 것을 확인했다. 수정 후 시각의 새 브라우저 오류는 없었다.
