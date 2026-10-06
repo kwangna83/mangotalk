@@ -29,6 +29,8 @@
 
 `message_attachments`에 양수인 nullable `width`와 `height`를 추가한다. 업로드 전 Flutter 이미지 디코더로 실제 픽셀 크기를 확인하고 `create_image_message` RPC에 함께 전달한다. 메시지 조회 RPC는 attachment ID, 크기와 기존 Storage 정보를 반환하고 `ChatMessage`가 이를 보유한다.
 
+Flutter Web의 `ImageDescriptor.width/height`는 런타임에서 지원되지 않으므로 업로드 전처리는 지원 포맷의 표준 인코딩 헤더를 파싱한다. PNG는 IHDR, JPEG은 SOF, WebP는 VP8/VP8L/VP8X 크기 필드를 사용하고 잘못되거나 잘린 바이트는 업로드 전에 거부한다. 이 방식은 고해상도 원본 전체를 크기 확인용으로 디코딩하지 않는다.
+
 컬럼을 nullable로 두어 기존 첨부를 별도 backfill 없이 호환한다. 새 데이터부터 크기를 필수로 전달하되 기존 RPC 호출과 배포 순서의 호환성을 위해 데이터베이스 함수 전환은 기본값 또는 버전 교체 절차를 사용한다.
 
 대안으로 클라이언트에서 매번 이미지 헤더를 먼저 내려받는 방식은 네트워크 요청을 제거하지 못하고 레이아웃 확정도 늦어 제외한다.
@@ -87,6 +89,7 @@ Blob URL 재사용만으로는 Flutter 기본 이미지 캐시 퇴거 후의 빈
 - [원본 이미지 캐시가 저장 공간을 빠르게 채움] → 64MB·100개와 quota 20% 중 작은 한도를 적용하고 후속 변경에서 썸네일 생성을 검토한다.
 - [고해상도 이미지 동시 디코딩으로 메모리가 급증함] → 목록용 축소 디코딩과 동시 작업 4개 제한을 적용하고 codec·Blob URL을 즉시 해제한다.
 - [DB와 Web 클라이언트 배포 순서가 어긋남] → nullable 컬럼과 호환 가능한 RPC 배포 후 클라이언트를 배포하고, 구버전 클라이언트 호출을 테스트한다.
+- [Web 업로드 크기 확인 API 미지원] → Flutter Web의 `ImageDescriptor` 크기 getter 대신 JPEG·PNG·WebP 헤더 파서와 포맷별 회귀 테스트를 사용한다.
 - [Blob URL 생명주기 누수] → 사용자·안정적 키별 참조 수와 최대 50개 LRU를 적용하고 로그아웃 시 일괄 revoke하는 테스트를 둔다.
 
 ## Migration Plan
